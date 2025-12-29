@@ -1,0 +1,20 @@
+# Build results
+build/
+.gradle/
+out/
+bin/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Git
+.git
+.gitignore
+
+# Tests associated files
+hs_err_pid*
+
+# Local env
+.env
