@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1.7
+
+# =============================================================================
+# PYTHON DISTROLESS DOCKERFILE
+# Maximum security với distroless base + multi-arch support
+# =============================================================================
+
+ARG PYTHON_VERSION=3.13
+ARG TARGETARCH
+
+ARG VERSION=0.1.0
+ARG BUILD_DATE
+ARG VCS_REF
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder - Install dependencies
+# -----------------------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS builder
+
+ENV UV_LINK_MODE=copy
+
+ARG TARGETARCH
+
+WORKDIR /build
+
+# Copy dependency files
+COPY pyproject.toml uv.lock* ./
+
+# Install dependencies với cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project 2>/dev/null || \
+    echo "No lock file, skipping sync"
+
+# Copy source code
+COPY src/ src/
+
+# Install project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# Stage 2: Shared Libraries Collector
+# -----------------------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS lib-collector
+
+ARG TARGETARCH
+
+# Copy shared libraries theo architecture
+# TARGETARCH là built-in arg của docker buildx (amd64 hoặc arm64)
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        LIBARCH="x86_64"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        LIBARCH="aarch64"; \
+    else \
+        LIBARCH="x86_64"; \
+    fi && \
+    mkdir -p /lib/multi-arch && \
+    # Core libraries cần cho Python
+    cp /lib/${LIBARCH}-linux-gnu/libc.so.6 /lib/multi-arch/ && \
+    cp /lib/${LIBARCH}-linux-gnu/libm.so.6 /lib/multi-arch/ && \
+    cp /lib/${LIBARCH}-linux-gnu/libz.so.1 /lib/multi-arch/ && \
+    cp /lib/${LIBARCH}-linux-gnu/libgcc_s.so.1 /lib/multi-arch/ && \
+    # Python shared library
+    cp /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /lib/multi-arch/ 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# Stage 3: Optimizer - Strip và clean
+# -----------------------------------------------------------------------------
+FROM builder AS optimizer
+
+RUN apt-get update && apt-get install -y --no-install-recommends binutils && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Aggressive optimization
+RUN find .venv -type f \( -name '*.so*' -o -name '*.a' \) \
+        -exec strip --strip-all {} + 2>/dev/null || true && \
+    find .venv \( -type d -name __pycache__ -o -type f -name '*.py[co]' \) \
+        -delete 2>/dev/null || true && \
+    find .venv -type d \( -name tests -o -name test -o -name docs \) \
+        -prune -exec rm -rf {} + 2>/dev/null || true && \
+    find .venv -type f \( -name '*.pyi' -o -name '*.c' -o -name '*.h' \) \
+        -delete 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# Stage 4: Runtime - Distroless (maximum security)
+# -----------------------------------------------------------------------------
+FROM gcr.io/distroless/base-debian12:nonroot AS runtime
+
+ARG VERSION
+ARG BUILD_DATE
+ARG VCS_REF
+
+LABEL org.opencontainers.image.title="Python Service (Distroless)" \
+      org.opencontainers.image.description="Maximum security Python with distroless + multi-arch" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.base.name="gcr.io/distroless/base-debian12:nonroot"
+
+WORKDIR /app
+
+# Copy shared libraries
+COPY --from=lib-collector /lib/multi-arch/ /lib/multi-arch/
+
+# Copy Python interpreter
+COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/ /usr/local/lib/python${PYTHON_VERSION}/
+COPY --from=builder /usr/local/bin/python /usr/local/bin/python3
+
+# Copy optimized venv
+COPY --from=optimizer --chown=nonroot:nonroot /build/.venv/ /app/.venv/
+
+# Copy source code
+COPY --chown=nonroot:nonroot src/ ./src/
+
+# Environment
+ENV PATH="/app/.venv/bin/:$PATH" \
+    PYTHONPATH="/app/src/" \
+    LANG=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONHASHSEED=random \
+    PYTHONOPTIMIZE=2 \
+    HOST=0.0.0.0 \
+    PORT=8000 \
+    WORKERS=2 \
+    LD_LIBRARY_PATH=/lib/multi-arch
+
+# nonroot user mặc định trong distroless (UID 65532)
+
+EXPOSE ${PORT}
+
+# Distroless không có shell, không thể dùng curl/wget
+# Healthcheck phải dựa vào orchestrator (K8s, Docker Compose)
+
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["python"]
+CMD ["-m", "src.main"]

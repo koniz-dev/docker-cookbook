@@ -1,0 +1,176 @@
+# syntax=docker/dockerfile:1.7
+
+# =============================================================================
+# JAVA/SPRING BOOT DISTROLESS DOCKERFILE
+# Maximum security với distroless base image
+# =============================================================================
+
+ARG JDK_VERSION=21
+ARG BUILD_IMAGE=eclipse-temurin:${JDK_VERSION}-jdk-alpine
+
+ARG VERSION=0.0.1
+ARG BUILD_DATE
+ARG VCS_REF
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# -----------------------------------------------------------------------------
+FROM ${BUILD_IMAGE} AS builder
+
+ENV GRADLE_USER_HOME=/cache/.gradle
+
+WORKDIR /build
+
+COPY gradlew ./
+COPY gradle/ gradle/
+COPY build.gradle settings.gradle* ./
+
+RUN chmod +x gradlew
+
+# Cache dependencies
+RUN --mount=type=cache,target=/cache/.gradle \
+    ./gradlew dependencies --no-daemon || true
+
+COPY src/ src/
+
+# Build JAR
+RUN --mount=type=cache,target=/cache/.gradle \
+    ./gradlew bootJar --no-daemon -x test
+
+RUN mkdir -p /app && mv build/libs/*.jar /app/app.jar
+
+# -----------------------------------------------------------------------------
+# Stage 2: JRE Builder - Custom JRE với jlink
+# -----------------------------------------------------------------------------
+FROM ${BUILD_IMAGE} AS jre-builder
+
+WORKDIR /app
+COPY --from=builder /app/app.jar ./
+
+# Extract và analyze
+RUN jar xf app.jar && \
+    jdeps --ignore-missing-deps -q \
+        --recursive \
+        --multi-release 21 \
+        --print-module-deps \
+        --class-path 'BOOT-INF/lib/*' \
+        app.jar > deps.info
+
+# Tạo custom JRE
+RUN jlink \
+    --add-modules $(cat deps.info) \
+    --strip-debug \
+    --no-man-pages \
+    --no-header-files \
+    --compress=zip-9 \
+    --output /custom-jre
+
+# -----------------------------------------------------------------------------
+# Stage 3: Layer Extractor
+# -----------------------------------------------------------------------------
+FROM ${BUILD_IMAGE} AS layer-extractor
+
+WORKDIR /app
+COPY --from=builder /app/app.jar ./
+RUN java -Djarmode=layertools -jar app.jar extract --destination /extracted
+
+# -----------------------------------------------------------------------------
+# Stage 4: Healthcheck Builder - Pure Java healthcheck (no curl needed)
+# -----------------------------------------------------------------------------
+FROM ${BUILD_IMAGE} AS healthcheck-builder
+
+WORKDIR /app
+
+# Tạo Java healthcheck class
+RUN cat > HealthCheck.java << 'EOF'
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.Instant;
+
+public class HealthCheck {
+    public static void main(String[] args) {
+        String healthUrl = "http://localhost:8080/actuator/health";
+        try {
+            URL url = new URL(healthUrl);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
+            conn.setRequestMethod("GET");
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                System.out.println(Instant.now() + " Healthcheck OK (" + code + ")");
+                System.exit(0);
+            } else {
+                System.err.println(Instant.now() + " Healthcheck failed (" + code + ")");
+                System.exit(1);
+            }
+        } catch (Exception e) {
+            System.err.println(Instant.now() + " Healthcheck error: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+}
+EOF
+
+RUN javac HealthCheck.java
+
+# -----------------------------------------------------------------------------
+# Stage 5: Runtime - Distroless (maximum security)
+# -----------------------------------------------------------------------------
+FROM gcr.io/distroless/base-debian12:nonroot AS runtime
+
+ARG VERSION
+ARG BUILD_DATE
+ARG VCS_REF
+
+LABEL org.opencontainers.image.title="Spring Boot Application (Distroless)" \
+      org.opencontainers.image.description="Maximum security with distroless base" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.base.name="gcr.io/distroless/base-debian12:nonroot"
+
+# Copy custom JRE
+ENV JAVA_HOME=/opt/java
+ENV PATH="$JAVA_HOME/bin:$PATH"
+COPY --from=jre-builder /custom-jre $JAVA_HOME
+
+WORKDIR /app
+
+# Copy Spring Boot layers
+COPY --from=layer-extractor /extracted/dependencies/ ./
+COPY --from=layer-extractor /extracted/spring-boot-loader/ ./
+COPY --from=layer-extractor /extracted/snapshot-dependencies/ ./
+COPY --from=layer-extractor /extracted/application/ ./
+
+# Copy healthcheck class
+COPY --from=healthcheck-builder /app/HealthCheck.class ./
+
+# JVM Configuration
+ENV JAVA_OPTS="\
+    -XX:+UseContainerSupport \
+    -XX:MaxRAMPercentage=75.0 \
+    -XX:InitialRAMPercentage=50.0 \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=100 \
+    -XX:+UseStringDeduplication \
+    -XX:+ExitOnOutOfMemoryError \
+    -Djava.security.egd=file:/dev/./urandom \
+    -Djava.awt.headless=true"
+
+# Distroless đã chạy với nonroot user (UID 65532)
+# Không cần USER directive
+
+EXPOSE 8080
+
+# Healthcheck sử dụng Pure Java (không cần curl)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["java", "-cp", "/app", "HealthCheck"]
+
+STOPSIGNAL SIGTERM
+
+# Chạy với exec form (distroless không có shell)
+ENTRYPOINT ["java"]
+CMD ["org.springframework.boot.loader.launch.JarLauncher"]
