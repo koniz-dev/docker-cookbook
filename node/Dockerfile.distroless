@@ -1,0 +1,86 @@
+# syntax=docker/dockerfile:1.7
+
+# =============================================================================
+# NODE.JS DISTROLESS DOCKERFILE (SECURITY FOCUSED)
+# Ultra-secure: Distroless + pnpm deploy + No shell
+# =============================================================================
+
+ARG NODE_VERSION=22
+ARG ALPINE_VERSION=3.21
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+
+COPY . .
+RUN pnpm build
+
+# Use pnpm deploy to create minimal bundle
+RUN pnpm deploy --prod --filter=. /prod
+
+# -----------------------------------------------------------------------------
+# Stage 2: Healthcheck Builder - Node.js healthcheck script
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
+
+WORKDIR /build
+
+# Create a self-contained healthcheck script
+# This will be executed by the Node.js runtime in distroless
+RUN cat > healthcheck.mjs << 'EOF'
+import http from 'http';
+
+const options = {
+  host: 'localhost',
+  port: process.env.PORT || 3000,
+  path: '/health',
+  timeout: 2000
+};
+
+const req = http.request(options, (res) => {
+  process.exit(res.statusCode === 200 ? 0 : 1);
+});
+
+req.on('error', () => process.exit(1));
+req.on('timeout', () => { req.destroy(); process.exit(1); });
+req.end();
+EOF
+
+# -----------------------------------------------------------------------------
+# Stage 3: Final - Distroless
+# -----------------------------------------------------------------------------
+FROM gcr.io/distroless/nodejs${NODE_VERSION}-debian12:nonroot
+
+WORKDIR /app
+
+# Set environment
+ENV NODE_ENV=production \
+    PORT=3000
+
+# Copy deployed application
+COPY --from=builder --chown=nonroot:nonroot /prod ./
+
+# Copy healthcheck script
+COPY --from=healthcheck-builder --chown=nonroot:nonroot /build/healthcheck.mjs ./
+
+# Distroless runs as nonroot (UID 65532) by default
+
+EXPOSE 3000
+
+# Healthcheck using Node.js script (distroless has no shell/wget/curl)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/nodejs/bin/node", "healthcheck.mjs"]
+
+# Distroless Node.js expects the script path as argument
+CMD ["dist/main.js"]

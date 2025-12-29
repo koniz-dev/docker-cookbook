@@ -1,0 +1,25 @@
+# Build results
+bin/
+dist/
+build/
+*.exe
+*.test
+*.out
+app
+
+# Vendor
+vendor/
+
+# IDE files
+.idea/
+.vscode/
+
+# Git
+.git
+.gitignore
+
+# Env
+.env
+
+# Logs
+*.log

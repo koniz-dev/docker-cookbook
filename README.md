@@ -36,7 +36,21 @@ Optimized for Python backends:
 - **Security**: Multi-arch Distroless, CVE auto-patching.
 - **Structure**: Virtual environment patterns.
 
-### 4. ⚛️ [React / Vite](./react/README.md)
+### 4. 🟩 [Node.js / Express](./node/README.md)
+Optimized for Node.js Backends/APIs:
+- **Stability**: `tini` for proper signal handling (PID 1).
+- **Security**: non-root user enforcement, distroless options.
+- **Efficiency**: `pnpm deploy` for ultimate dependency pruning.
+- **Production**: Multi-stage builds with minimal final image.
+
+### 5. 🐹 [Golang](./go/README.md)
+Optimized for Go Applications:
+- **Static**: `CGO_ENABLED=0` pure Go builds.
+- **Extreme**: `FROM scratch` + UPX compression (~2-5MB final image).
+- **Self-contained**: Inject SSL certs and user data into scratch.
+- **Security**: Zero-OS images for maximum hardening.
+
+### 6. ⚛️ [React / Vite](./react/README.md)
 Optimized for Frontend SPAs:
 - **Extreme Size**: Scratch image with static Nginx (~5MB).
 - **Performance**: Pre-compression (Brotli/Gzip), Nginx caching strategy.
@@ -55,11 +69,16 @@ Each module contains ready-to-run `Dockerfile` examples:
 # Production ready
 docker build -t java-app ./java
 docker build -t python-app ./python
+docker build -t node-app ./node
+docker build -t go-app ./go
 docker build -t react-app ./react
 
 # Extreme optimization / Security variants
 docker build -f java/Dockerfile.distroless -t java-secure ./java
 docker build -f python/Dockerfile.distroless -t python-secure ./python
+docker build -f node/Dockerfile.distroless -t node-secure ./node
+docker build -f go/Dockerfile.distroless -t go-secure ./go
+docker build -f go/Dockerfile.scratch -t go-extreme ./go   # ULTIMATE (~2-5MB)
 docker build -f react/Dockerfile.scratch -t react-minimal ./react
 ```
 

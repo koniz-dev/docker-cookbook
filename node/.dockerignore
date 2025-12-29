@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.pnpm-store
+
+# Production build output
+dist/
+build/
+
+# IDE files
+.idea/
+.vscode/
+
+# Git
+.git
+.gitignore
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env
+.env
+.env.test
+.env.production
+
+# Testing
+coverage/
+TRASH/
