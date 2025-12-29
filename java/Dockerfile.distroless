@@ -2,7 +2,7 @@
 
 # =============================================================================
 # JAVA/SPRING BOOT DISTROLESS DOCKERFILE
-# Maximum security với distroless base image
+# Maximum security with distroless base image
 # =============================================================================
 
 ARG JDK_VERSION=21
@@ -40,14 +40,14 @@ RUN --mount=type=cache,target=/cache/.gradle \
 RUN mkdir -p /app && mv build/libs/*.jar /app/app.jar
 
 # -----------------------------------------------------------------------------
-# Stage 2: JRE Builder - Custom JRE với jlink
+# Stage 2: JRE Builder - Custom JRE with jlink
 # -----------------------------------------------------------------------------
 FROM ${BUILD_IMAGE} AS jre-builder
 
 WORKDIR /app
 COPY --from=builder /app/app.jar ./
 
-# Extract và analyze
+# Extract and analyze
 RUN jar xf app.jar && \
     jdeps --ignore-missing-deps -q \
         --recursive \
@@ -56,7 +56,7 @@ RUN jar xf app.jar && \
         --class-path 'BOOT-INF/lib/*' \
         app.jar > deps.info
 
-# Tạo custom JRE
+# Create custom JRE
 RUN jlink \
     --add-modules $(cat deps.info) \
     --strip-debug \
@@ -81,7 +81,7 @@ FROM ${BUILD_IMAGE} AS healthcheck-builder
 
 WORKDIR /app
 
-# Tạo Java healthcheck class
+# Create Java healthcheck class
 RUN cat > HealthCheck.java << 'EOF'
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -160,17 +160,17 @@ ENV JAVA_OPTS="\
     -Djava.security.egd=file:/dev/./urandom \
     -Djava.awt.headless=true"
 
-# Distroless đã chạy với nonroot user (UID 65532)
-# Không cần USER directive
+# Distroless has already run as nonroot user (UID 65532)
+# No need for USER directive
 
 EXPOSE 8080
 
-# Healthcheck sử dụng Pure Java (không cần curl)
+# Healthcheck using Pure Java (no curl needed)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["java", "-cp", "/app", "HealthCheck"]
 
 STOPSIGNAL SIGTERM
 
-# Chạy với exec form (distroless không có shell)
+# Run with exec form (distroless has no shell)
 ENTRYPOINT ["java"]
 CMD ["org.springframework.boot.loader.launch.JarLauncher"]

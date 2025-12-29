@@ -1,10 +1,10 @@
 # 🐳 Docker Cookbook
 
-> Tổng hợp các best practices, kỹ thuật tối ưu, và patterns phổ biến khi viết Dockerfile cho production.
+> A comprehensive collection of best practices, optimization techniques, and common patterns for writing production-grade Dockerfiles.
 
 ---
 
-## 📑 Mục lục
+## 📑 Table of Contents
 
 - [0. Fundamentals](#0-fundamentals)
 - [1. Multi-stage Builds](#1-multi-stage-builds)
@@ -70,13 +70,13 @@
 
 ### Docker Image Layers
 
-Docker images được xây dựng từ nhiều **layers** chồng lên nhau:
+Docker images are built from stacked **layers**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Container (Read-Write)                   │
+│                    Container (Read-Write)                    │
 ├─────────────────────────────────────────────────────────────┤
-│ Layer 5: COPY . . (Source code)                      [2MB]  │ ← Thay đổi thường xuyên
+│ Layer 5: COPY . . (Source code)                      [2MB]  │ ← Changes frequently
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 4: RUN npm install (Dependencies)              [80MB] │
 ├─────────────────────────────────────────────────────────────┤
@@ -84,29 +84,29 @@ Docker images được xây dựng từ nhiều **layers** chồng lên nhau:
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 2: RUN apt-get install (System deps)           [50MB] │
 ├─────────────────────────────────────────────────────────────┤
-│ Layer 1: FROM node:20-alpine (Base image)            [50MB] │ ← Ít thay đổi nhất
+│ Layer 1: FROM node:20-alpine (Base image)            [50MB] │ ← Changes rarely
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**💡 Tại sao layers quan trọng?**
+**💡 Why are layers important?**
 
-1. **Caching**: Docker cache mỗi layer. Nếu layer không đổi → reuse cache
-2. **Sharing**: Nhiều images có thể share cùng base layers
-3. **Efficiency**: Push/pull chỉ cần transfer layers mới
+1. **Caching**: Docker caches each layer. If a layer hasn't changed → reuse cache.
+2. **Sharing**: Multiple images can share the same base layers.
+3. **Efficiency**: Push/pull operations only transfer new/changed layers.
 
-**⚠️ Nguyên tắc quan trọng:**
-- Layer chỉ có thể thêm, không thể xóa (delete trong layer sau không giảm size)
-- Sắp xếp: ít thay đổi → nhiều thay đổi
-- Mỗi RUN, COPY, ADD tạo một layer mới
+**⚠️ Key Principles:**
+- Layers are additive; you cannot "delete" data in a subsequent layer to reduce size (it only hides it).
+- Order matters: Put stable layers first, volatile layers last.
+- Each RUN, COPY, ADD creates a new layer (though recent Docker versions optimize RUN instructions).
 
 ### Union Filesystem (OverlayFS)
 
-Docker sử dụng **Union Filesystem** để stack layers:
+Docker uses a **Union Filesystem** to stack layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Merged View (Container sees)             │
-│  /app/index.js, /node_modules/*, /etc/*, /usr/*             │
+│  /app/index.js, /node_modules/*, /etc/*, /usr/*            │
 └─────────────────────────────────────────────────────────────┘
                               ▲
                               │ Union Mount
@@ -122,58 +122,57 @@ Docker sử dụng **Union Filesystem** để stack layers:
 ```
 
 **💡 Key concepts:**
-- **Lower layers**: Read-only, từ image
-- **Upper layer**: Read-write, container runtime changes
-- **Copy-on-Write**: Khi modify file từ lower layer → copy lên upper layer
+- **Lower layers**: Read-only, from the image.
+- **Upper layer**: Read-write, contains runtime changes.
+- **Copy-on-Write**: Modifying a file from a lower layer copies it to the upper layer first.
 
 ### OCI Standard (Open Container Initiative)
 
-**OCI là gì?**
-
-OCI là tiêu chuẩn mở cho container format, đảm bảo images có thể chạy trên mọi OCI-compliant runtime.
+**What is OCI?**
+An open governance structure for container formats and runtimes.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OCI Image Specification                  │
+│                    OCI Image Specification                   │
 ├─────────────────────────────────────────────────────────────┤
-│  Image Manifest     → Mô tả layers và config                │
+│  Image Manifest     → Layers and config description         │
 │  Image Config       → Metadata (env, cmd, labels)           │
-│  Filesystem Layers  → Các tar.gz layers                     │
+│  Filesystem Layers  → The tar.gz layer blobs                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**💡 Tại sao OCI quan trọng?**
-- **Portability**: Build với Docker, run với Podman, containerd, CRI-O
-- **Security**: Có thể scan, sign, verify images
-- **Ecosystem**: Tools như Trivy, Buildah, Skopeo đều OCI-compatible
+**💡 Why OCI matters?**
+- **Portability**: Build with Docker, run with Podman, containerd, CRI-O, etc.
+- **Security**: Standardized scanning, signing, and verification.
+- **Ecosystem**: Tools like Trivy, Buildah, Skopeo work across all OCI images.
 
 ### BuildKit vs Legacy Builder
 
 | Feature | Legacy Builder | BuildKit |
 |---------|----------------|----------|
 | **Parallelism** | Sequential stages | ✅ Parallel builds |
-| **Cache** | Basic layer cache | ✅ Advanced (mount, registry) |
+| **Cache** | Basic layer cache | ✅ Advanced (mounts, registry) |
 | **Secrets** | ❌ Not supported | ✅ `--mount=type=secret` |
 | **SSH** | ❌ Not supported | ✅ `--mount=type=ssh` |
 | **Output** | Verbose | ✅ Rich progress UI |
 | **Multi-platform** | ❌ Separate builds | ✅ `--platform` flag |
 
-**Bật BuildKit:**
+**Enable BuildKit:**
 ```bash
-# Môi trường
+# Environment variable
 export DOCKER_BUILDKIT=1
 
-# Hoặc trong Dockerfile
+# Or in Dockerfile syntax
 # syntax=docker/dockerfile:1.7
 ```
 
-**💡 BuildKit nên là default** - Nhanh hơn, nhiều features hơn, no downsides.
+**💡 BuildKit should be default** - Faster, more features, no downsides.
 
-### Tại sao Image Size quan trọng?
+### Why Image Size Matters?
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              Image Size Impact                              │
+│              Image Size Impact                               │
 ├─────────────────────────────────────────────────────────────┤
 │  📦 Storage Cost     → Larger image = more $/GB             │
 │  🚀 Deploy Speed     → Larger image = slower pull           │
@@ -182,7 +181,7 @@ export DOCKER_BUILDKIT=1
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Ví dụ thực tế:**
+**Real-world Example:**
 
 | Scenario | 500MB Image | 50MB Image |
 |----------|-------------|------------|
@@ -191,16 +190,16 @@ export DOCKER_BUILDKIT=1
 | CVE count (typical) | 100+ | **10-20** |
 
 **💡 Rule of thumb:**
-- Development: Size ít quan trọng, ưu tiên tiện lợi
-- Production: Nhỏ nhất có thể, security first
+- Development: Size is less critical, prioritize convenience.
+- Production: Minimal size, security first.
 
 ---
 
 ## 1. Multi-stage Builds
 
-Multi-stage build cho phép tách biệt môi trường build và runtime, giúp giảm đáng kể kích thước image cuối cùng.
+Multi-stage builds allow you to separate the build environment from the runtime environment, significantly reducing the final image size.
 
-### Pattern cơ bản
+### Basic Pattern
 
 ```dockerfile
 # Stage 1: Builder
@@ -216,39 +215,39 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 ```
 
-### Khi nào nên dùng nhiều stage?
+### When to use multiple stages?
 
-| Số Stage | Use Case |
-|----------|----------|
-| 2 stages | Build + Runtime (phổ biến nhất) |
+| Stages | Use Case |
+|--------|----------|
+| 2 stages | Build + Runtime (most common) |
 | 3 stages | Build + Test + Runtime |
-| 4+ stages | Build + Dependencies + Compression + Runtime |
+| 4+ stages | Build + Deps + Compression + Runtime |
 
 ### Tips
 
-- Đặt tên cho mỗi stage bằng `AS <name>` để dễ đọc
-- Chỉ copy những gì cần thiết từ builder stage
-- Có thể copy từ nhiều stage khác nhau
+- Name your stages with `AS <name>` for readability.
+- Copy only what is necessary from the builder stage.
+- You can copy from multiple different stages.
 
 ---
 
 ## 2. Base Image Selection
 
-### Bảng so sánh Base Images
+### Base Image Comparison
 
-| Base Image | Size | Ưu điểm | Nhược điểm | Phù hợp cho |
-|------------|------|---------|------------|-------------|
-| **Alpine** | ~5MB | Rất nhỏ, có package manager | Dùng musl libc (có thể gây incompatibility) | Ứng dụng đơn giản, tools |
-| **Debian Slim** | ~25MB | glibc, ổn định, nhiều packages | Lớn hơn Alpine | Python, Node.js |
-| **Distroless** | ~2-20MB | Cực kỳ secure, không shell | Khó debug, không package manager | Production, security-critical |
-| **Scratch** | 0MB | Nhỏ nhất có thể | Phải tự copy mọi thứ | Static binaries (Go, Rust) |
-| **Ubuntu** | ~70MB | Đầy đủ tools, dễ debug | Lớn | Development, legacy apps |
+| Base Image | Size | Pros | Cons | Best For |
+|------------|------|------|------|----------|
+| **Alpine** | ~5MB | Tiny, has package manager | Uses musl libc (potential incompatibility) | Simple apps, tools |
+| **Debian Slim** | ~25MB | glibc, stable, many packages | Larger than Alpine | Python, Node.js |
+| **Distroless** | ~2-20MB | Extremely secure, no shell | Hard to debug, no package manager | Production, security-critical |
+| **Scratch** | 0MB | Minimum possible | Must copy everything manually | Static binaries (Go, Rust) |
+| **Ubuntu** | ~70MB | Full ecosystem, easy debug | Large | Development, legacy apps |
 
-### Quyết định chọn base image
+### Decision Tree
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Chọn Base Image                          │
+│                    Choose Base Image                        │
 └─────────────────────────────────────────────────────────────┘
                             │
             ┌───────────────┴───────────────┐
@@ -257,11 +256,11 @@ COPY --from=builder /app/dist /usr/share/nginx/html
     (Go, Rust, C)                     (Python, Node, Java)
             │                               │
             ▼                               ▼
-        scratch                    Cần security cao?
+        scratch                    High security needed?
                                           │
                           ┌───────────────┴───────────────┐
                           ▼                               ▼
-                    distroless                      Cần debug?
+                    distroless                      Debug needed?
                                                           │
                                           ┌───────────────┴───────────────┐
                                           ▼                               ▼
@@ -270,53 +269,53 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 ### Image Pinning
 
-**❌ Không nên:**
+**❌ Don't:**
 ```dockerfile
 FROM python:3.13
 ```
 
-**✅ Nên làm:**
+**✅ Do:**
 ```dockerfile
 FROM python:3.13-alpine@sha256:abc123...
 ```
 
-Lý do: Digest đảm bảo reproducible builds và tránh supply chain attacks.
+Reason: Digests ensure reproducible builds and prevent supply chain attacks (e.g., tag mutation).
 
 ---
 
 ## 3. Layer Optimization
 
-### Nguyên tắc Layer Caching
+### Layer Caching Principles
 
-Docker cache mỗi layer. Nếu một layer thay đổi, tất cả layers sau đó sẽ bị rebuild.
+Docker caches each layer. If one layer changes, all subsequent layers must be rebuilt.
 
-**Sắp xếp theo tần suất thay đổi (ít → nhiều):**
+**Order by frequency of change (Least → Most):**
 
 ```dockerfile
-# 1. Base image (ít thay đổi nhất)
+# 1. Base image (rarely changes)
 FROM python:3.13-slim
 
 # 2. System dependencies
 RUN apt-get update && apt-get install -y curl
 
-# 3. App dependencies (thay đổi khi thêm package mới)
+# 3. App dependencies (changes when adding packages)
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# 4. Source code (thay đổi thường xuyên nhất)
+# 4. Source code (changes frequently)
 COPY . .
 ```
 
 ### Merge RUN Commands
 
-**❌ Tạo nhiều layers:**
+**❌ Multiple layers:**
 ```dockerfile
 RUN apt-get update
 RUN apt-get install -y curl
 RUN apt-get clean
 ```
 
-**✅ Một layer duy nhất:**
+**✅ Single layer:**
 ```dockerfile
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
@@ -325,7 +324,7 @@ RUN apt-get update && \
 
 ### .dockerignore
 
-Luôn tạo file `.dockerignore`:
+Always create a `.dockerignore` file:
 
 ```
 node_modules/
@@ -347,24 +346,24 @@ build/
 
 ### 4.1 Non-root User
 
-**Luôn chạy container với user non-root:**
+**Always run containers as a non-root user:**
 
 ```dockerfile
-# Tạo user
+# Create user
 RUN addgroup -g 1000 -S appgroup && \
     adduser -u 1000 -S appuser -G appgroup
 
-# Chuyển ownership nếu cần
+# Ownership
 COPY --chown=appuser:appgroup . .
 
-# Chuyển sang user mới
+# Switch user
 USER appuser
 ```
 
 ### 4.2 Minimal Permissions
 
 ```dockerfile
-# Chỉ cho phép read + execute, không allow write
+# Read + Execute only, no Write permission
 RUN chmod -R 550 /app
 ```
 
@@ -385,10 +384,10 @@ RUN --mount=type=secret,id=api_key \
 ### 4.4 Scan for Vulnerabilities
 
 ```bash
-# Sử dụng Trivy
+# Using Trivy
 trivy image myimage:latest
 
-# Hoặc Docker Scout
+# Or Docker Scout
 docker scout cves myimage:latest
 ```
 
@@ -396,19 +395,19 @@ docker scout cves myimage:latest
 
 ## 5. BuildKit Features
 
-Bật BuildKit:
+Enable BuildKit:
 ```bash
 export DOCKER_BUILDKIT=1
 ```
 
-Hoặc trong Dockerfile:
+Or in Dockerfile:
 ```dockerfile
 # syntax=docker/dockerfile:1.7
 ```
 
 ### 5.1 Cache Mounts
 
-Tăng tốc build bằng cách cache dependencies:
+Speed up builds by caching dependencies:
 
 ```dockerfile
 # Node.js / pnpm
@@ -426,7 +425,7 @@ RUN --mount=type=cache,target=/root/.gradle \
 
 ### 5.2 Bind Mounts
 
-Copy files tạm thời mà không tạo layer:
+Access files without copying them creates no layer:
 
 ```dockerfile
 RUN --mount=type=bind,source=package.json,target=package.json \
@@ -456,7 +455,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 ```
 
-### Lightweight Check (không cần curl)
+### Lightweight Check (no curl required)
 
 ```dockerfile
 # Python
@@ -468,12 +467,12 @@ HEALTHCHECK CMD wget --quiet --tries=1 --spider http://localhost:8080/health || 
 
 ### Config Options
 
-| Option | Mô tả | Giá trị mẫu |
-|--------|-------|-------------|
-| `--interval` | Khoảng cách giữa các lần check | 30s |
-| `--timeout` | Thời gian chờ response | 3s |
-| `--start-period` | Thời gian chờ app khởi động | 10s-60s |
-| `--retries` | Số lần thử lại trước khi unhealthy | 3 |
+| Option | Description | Value |
+|--------|-------------|-------|
+| `--interval` | Frequency of check | 30s |
+| `--timeout` | Wait time for response | 3s |
+| `--start-period` | Init grace period | 10s-60s |
+| `--retries` | Failures before unhealthy | 3 |
 
 ---
 
@@ -487,7 +486,7 @@ STOPSIGNAL SIGTERM
 
 ### Init System (tini)
 
-Giải quyết vấn đề zombie processes và signal forwarding:
+Solves zombie processes and signal forwarding issues:
 
 ```dockerfile
 RUN apk add --no-cache tini
@@ -500,20 +499,20 @@ CMD ["node", "server.js"]
 **✅ Exec form (recommended):**
 ```dockerfile
 CMD ["node", "server.js"]
-# PID 1 = node process, nhận signals trực tiếp
+# PID 1 = node process, receives signals directly
 ```
 
 **❌ Shell form:**
 ```dockerfile
 CMD node server.js
-# PID 1 = /bin/sh, node là subprocess, không nhận SIGTERM
+# PID 1 = /bin/sh, node is subprocess, does not receive SIGTERM
 ```
 
 ---
 
 ## 8. OCI Labels
 
-Metadata chuẩn cho container images:
+Standard metadata for container images:
 
 ```dockerfile
 LABEL org.opencontainers.image.title="My App" \
@@ -551,32 +550,32 @@ docker build \
 
 ## 9. Size Optimization Checklist
 
-### ✅ Checklist tối ưu kích thước
+### ✅ Optimization Checklist
 
-- [ ] Sử dụng multi-stage build
-- [ ] Chọn base image phù hợp (alpine/slim/distroless)
-- [ ] Pin image version với digest
-- [ ] Merge RUN commands và clean up trong cùng layer
-- [ ] Xóa cache sau khi install (`rm -rf /var/cache/apk/*`)
-- [ ] Sử dụng `.dockerignore`
-- [ ] Không install docs, man pages, locales không cần thiết
+- [ ] Use multi-stage builds
+- [ ] Choose appropriate base image (alpine/slim/distroless)
+- [ ] Pin image versions with digests
+- [ ] Merge RUN commands and clean up in the same layer
+- [ ] Clear cache after install (`rm -rf /var/cache/apk/*`)
+- [ ] Use `.dockerignore` strictly
+- [ ] Do not install unnecessary docs, man pages, locales
 - [ ] Strip debug symbols (`strip --strip-all binary`)
-- [ ] Compress binary với UPX (nếu applicable)
-- [ ] Xóa source maps, test files trong production
+- [ ] Compress binary with UPX (if applicable)
+- [ ] Remove source maps, test files in production
 
-### Kiểm tra kích thước
+### Check Size
 
 ```bash
-# Xem size các layers
+# View layer sizes
 docker history myimage:latest
 
-# Analyze với dive
+# Analyze with dive
 dive myimage:latest
 ```
 
 ### 9.1 UPX Binary Compression
 
-[UPX](https://upx.github.io/) nén executable binaries, giữ nguyên chức năng nhưng giảm ~50-70% size.
+[UPX](https://upx.github.io/) compresses executable binaries while keeping them functional, reducing size by ~50-70%.
 
 ```dockerfile
 FROM alpine:3.21 AS compressor
@@ -592,19 +591,19 @@ RUN upx --best --lzma /server
 
 | Level | Command | Ratio | Speed | Use Case |
 |-------|---------|-------|-------|----------|
-| Fast | `upx -1` | 40% | Nhanh | Development |
-| Default | `upx` | 55% | Trung bình | General |
-| Best | `upx --best` | 65% | Chậm | Production |
-| **Ultra** | `upx --best --lzma` | **70%** | Rất chậm | Size-critical |
+| Fast | `upx -1` | 40% | Fast | Development |
+| Default | `upx` | 55% | Medium | General |
+| Best | `upx --best` | 65% | Slow | Production |
+| **Ultra** | `upx --best --lzma` | **70%** | Very Slow | Size-critical |
 
-**Lưu ý**:
-- Startup time tăng nhẹ do decompress
-- Một số antivirus có thể flag UPX-compressed binaries
-- Không áp dụng cho shared libraries (.so)
+**Notes**:
+- Slight startup time overhead due to decompression.
+- Some antivirus software might flag UPX-compressed binaries.
+- Not applicable for shared libraries (.so).
 
 ### 9.2 Brotli Static Compression
 
-Brotli cho compression ratio tốt hơn gzip ~20%, được hầu hết browsers hỗ trợ.
+Brotli offers ~20% better compression than gzip and is supported by most browsers.
 
 ```dockerfile
 FROM alpine:3.21 AS compressor
@@ -613,7 +612,7 @@ RUN apk add --no-cache brotli gzip
 
 COPY --from=builder /app/dist ./dist
 
-# Parallel compression: cả gzip và brotli
+# Parallel compression: both gzip and brotli
 RUN find dist -type f \( \
         -name "*.html" -o \
         -name "*.css" -o \
@@ -623,10 +622,10 @@ RUN find dist -type f \( \
     \) -print0 | xargs -0 -P$(nproc) -I {} sh -c 'gzip -9 -k "{}" && brotli -q 11 "{}"'
 ```
 
-**Nginx config cho Brotli:**
+**Nginx config for Brotli:**
 
 ```nginx
-# Với module ngx_brotli
+# With ngx_brotli module
 brotli on;
 brotli_static on;
 brotli_types text/plain text/css application/json application/javascript;
@@ -637,8 +636,8 @@ brotli_types text/plain text/css application/json application/javascript;
 | Method | Ratio | Decompression Speed | Browser Support |
 |--------|-------|---------------------|-----------------|
 | None | 0% | - | 100% |
-| Gzip-9 | 60-70% | Rất nhanh | 100% |
-| **Brotli-11** | **70-80%** | Nhanh | 95%+ |
+| Gzip-9 | 60-70% | Very Fast | 100% |
+| **Brotli-11** | **70-80%** | Fast | 95%+ |
 
 ---
 
@@ -647,21 +646,21 @@ brotli_types text/plain text/css application/json application/javascript;
 ### ❌ Anti-pattern 1: Running as root
 
 ```dockerfile
-# BAD - default là root
+# BAD - defaults to root
 CMD ["node", "server.js"]
 ```
 
 ### ❌ Anti-pattern 2: Using latest tag
 
 ```dockerfile
-# BAD - không reproducible
+# BAD - not reproducible
 FROM node:latest
 ```
 
 ### ❌ Anti-pattern 3: Copying everything
 
 ```dockerfile
-# BAD - copy cả node_modules, .git, etc.
+# BAD - copies node_modules, .git, etc.
 COPY . .
 ```
 
@@ -675,15 +674,15 @@ ENV DATABASE_PASSWORD=secret123
 ### ❌ Anti-pattern 5: Not cleaning up in same layer
 
 ```dockerfile
-# BAD - tạo layer lớn
+# BAD - creates bloated layer
 RUN apt-get update && apt-get install -y curl
-RUN rm -rf /var/lib/apt/lists/*  # Layer trước vẫn còn cache
+RUN rm -rf /var/lib/apt/lists/*  # Previous layer still has the cache
 ```
 
 ### ❌ Anti-pattern 6: Installing unnecessary packages
 
 ```dockerfile
-# BAD - vim, nano không cần trong production
+# BAD - vim, nano are not needed in production
 RUN apt-get install -y curl vim nano htop
 ```
 
@@ -691,12 +690,12 @@ RUN apt-get install -y curl vim nano htop
 
 ## 11. Multi-platform Builds
 
-Build image cho nhiều architectures (amd64, arm64) cùng lúc.
+Build images for multiple architectures (amd64, arm64) simultaneously.
 
 ### Setup BuildX
 
 ```bash
-# Tạo builder mới với multi-platform support
+# Create builder with multi-platform support
 docker buildx create --name multibuilder --use
 docker buildx inspect --bootstrap
 ```
@@ -704,7 +703,7 @@ docker buildx inspect --bootstrap
 ### Build Multi-platform
 
 ```dockerfile
-# Dockerfile tự động nhận TARGETARCH, TARGETOS
+# Dockerfile automatically detects TARGETARCH, TARGETOS
 ARG TARGETARCH
 ARG TARGETOS
 
@@ -712,12 +711,12 @@ FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 ARG TARGETARCH
 ARG TARGETOS
 
-# Cross-compile cho target platform
+# Cross-compile for target platform
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app
 ```
 
 ```bash
-# Build và push cho cả amd64 và arm64
+# Build and push for both amd64 and arm64
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --tag myregistry/myapp:latest \
@@ -725,7 +724,7 @@ docker buildx build \
     .
 ```
 
-### Platforms phổ biến
+### Common Platforms
 
 | Platform | Use Case |
 |----------|----------|
@@ -857,7 +856,7 @@ scan:
 # Scan local image
 trivy image myapp:latest
 
-# Scan với exit code (for CI)
+# Scan with exit code (for CI)
 trivy image --exit-code 1 --severity HIGH,CRITICAL myapp:latest
 
 # Scan Dockerfile
@@ -901,10 +900,10 @@ snyk container monitor myapp:latest
 
 | Practice | Recommendation |
 |----------|----------------|
-| Scan timing | Mỗi build trong CI |
+| Scan timing | Every build in CI |
 | Severity threshold | Block HIGH/CRITICAL |
-| Base image updates | Weekly hoặc khi có CVE |
-| SBOM generation | Mỗi release |
+| Base image updates | Weekly or upon CVE warning |
+| SBOM generation | Every release |
 
 ---
 
@@ -913,7 +912,7 @@ snyk container monitor myapp:latest
 ### Registry Cache
 
 ```bash
-# Build với registry cache
+# Build with registry cache
 docker buildx build \
     --cache-from type=registry,ref=myregistry/myapp:cache \
     --cache-to type=registry,ref=myregistry/myapp:cache,mode=max \
@@ -951,8 +950,8 @@ mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 # syntax=docker/dockerfile:1.7
 FROM node:20-alpine
 
-# Cache metadata được embed vào image
-# Cho phép cache-from trực tiếp từ image
+# Cache metadata is embedded into the image
+# Allows cache-from directly from the image
 ```
 
 ```bash
@@ -966,8 +965,8 @@ docker buildx build \
 
 | Mode | Description | Size | Use Case |
 |------|-------------|------|----------|
-| `min` | Chỉ cache layers cuối | Nhỏ | Quick builds |
-| `max` | Cache tất cả intermediate layers | Lớn | **CI/CD (recommended)** |
+| `min` | Caches final layers only | Small | Quick builds |
+| `max` | Caches all intermediate layers | Large | **CI/CD (recommended)** |
 
 ---
 
@@ -1063,7 +1062,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ---
 
-## 📚 Tài liệu tham khảo
+## 📚 References
 
 - [Docker Best Practices](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
 - [BuildKit Documentation](https://docs.docker.com/build/buildkit/)

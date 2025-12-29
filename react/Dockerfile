@@ -2,7 +2,7 @@
 
 # =============================================================================
 # REACT/VITE PRODUCTION DOCKERFILE
-# Tổng hợp best practices: pnpm + nginx + compression + security
+# Collection of best practices: pnpm + nginx + compression + security
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -31,14 +31,14 @@ RUN apk add --no-cache gzip
 
 WORKDIR /app
 
-# Copy package files trước để cache dependencies
+# Copy package files first to cache dependencies
 COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies với cache mount
+# Install dependencies with cache mount
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
-# Copy config files (thay đổi ít)
+# Copy config files (less frequently changed)
 COPY tsconfig.json tsconfig.node.json vite.config.ts ./
 COPY tailwind.config.ts postcss.config.js ./
 
@@ -50,13 +50,13 @@ COPY src ./src
 # Build production bundle
 ENV NODE_ENV=production
 RUN pnpm build && \
-    # Xóa source maps
+    # Delete source maps
     find dist -type f -name "*.map" -delete && \
-    # Xóa license files
+    # Delete license files
     find dist -type f -name "*.LICENSE.*" -delete && \
-    # Xóa stats nếu có
+    # Delete stats if present
     rm -f dist/stats.html && \
-    # Pre-compress với gzip level 9
+    # Pre-compress with gzip level 9
     find dist -type f \( \
         -name "*.html" -o \
         -name "*.css" -o \
@@ -88,7 +88,7 @@ LABEL org.opencontainers.image.title="React Application" \
 # Remove default nginx config
 RUN rm -rf /etc/nginx/conf.d/default.conf /usr/share/nginx/html/*
 
-# Create nginx config với SPA support
+# Create nginx config with SPA support
 RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
 server {
     listen 3000;
@@ -121,19 +121,19 @@ server {
         application/xml
         image/svg+xml;
     
-    # SPA fallback - quan trọng cho client-side routing
+    # SPA fallback - important for client-side routing
     location / {
         try_files $uri $uri/ /index.html;
     }
     
-    # Long cache cho static assets (có hash trong tên file)
+    # Long cache for static assets (hashed filenames)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
     }
     
-    # Không cache index.html để luôn lấy version mới
+    # Do not cache index.html to ensure fresh version
     location = /index.html {
         expires -1;
         add_header Cache-Control "no-cache, no-store, must-revalidate";

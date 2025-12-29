@@ -2,7 +2,7 @@
 
 # =============================================================================
 # PYTHON DISTROLESS DOCKERFILE
-# Maximum security với distroless base + multi-arch support
+# Maximum security with distroless base + multi-arch support
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -26,7 +26,7 @@ WORKDIR /build
 # Copy dependency files
 COPY pyproject.toml uv.lock* ./
 
-# Install dependencies với cache
+# Install dependencies with cache
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project 2>/dev/null || \
     echo "No lock file, skipping sync"
@@ -45,8 +45,8 @@ FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS lib-collector
 
 ARG TARGETARCH
 
-# Copy shared libraries theo architecture
-# TARGETARCH là built-in arg của docker buildx (amd64 hoặc arm64)
+# Copy shared libraries by architecture
+# TARGETARCH is a built-in arg of docker buildx (amd64 or arm64)
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         LIBARCH="x86_64"; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
@@ -55,7 +55,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
         LIBARCH="x86_64"; \
     fi && \
     mkdir -p /lib/multi-arch && \
-    # Core libraries cần cho Python
+    # Core libraries needed for Python
     cp /lib/${LIBARCH}-linux-gnu/libc.so.6 /lib/multi-arch/ && \
     cp /lib/${LIBARCH}-linux-gnu/libm.so.6 /lib/multi-arch/ && \
     cp /lib/${LIBARCH}-linux-gnu/libz.so.1 /lib/multi-arch/ && \
@@ -64,7 +64,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     cp /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /lib/multi-arch/ 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# Stage 3: Optimizer - Strip và clean
+# Stage 3: Optimizer - Strip and clean
 # -----------------------------------------------------------------------------
 FROM builder AS optimizer
 
@@ -129,12 +129,12 @@ ENV PATH="/app/.venv/bin/:$PATH" \
     WORKERS=2 \
     LD_LIBRARY_PATH=/lib/multi-arch
 
-# nonroot user mặc định trong distroless (UID 65532)
+# Default nonroot user in distroless (UID 65532)
 
 EXPOSE ${PORT}
 
-# Distroless không có shell, không thể dùng curl/wget
-# Healthcheck phải dựa vào orchestrator (K8s, Docker Compose)
+# Distroless has no shell, cannot use curl/wget
+# Healthcheck must rely on orchestrator (K8s, Docker Compose)
 
 STOPSIGNAL SIGTERM
 

@@ -1,44 +1,44 @@
 # 🐳 Docker Cookbook
 
-> **Bộ sưu tập các best practices, patterns và kỹ thuật tối ưu Dockerfile cho Production.**
+> **A collection of production-grade Dockerfile best practices, optimization patterns, and advanced techniques.**
 
-Dự án này cung cấp hướng dẫn chi tiết, từ cơ bản đến nâng cao (thậm chí là extreme optimization), giúp bạn build Docker images:
-- 📉 **Nhỏ gọn nhất** (Size optimization)
-- 🚀 **Khởi động nhanh nhất** (Startup optimization)
-- 🛡️ **An toàn nhất** (Security hardening)
-- ⚡ **Build hiệu quả nhất** (Build caching & CI/CD)
+This project provides comprehensive guides, ranging from fundamentals to advanced (and extreme) optimization techniques, helping you build Docker images that are:
+- 📉 **Smallest** (Size optimization)
+- 🚀 **Fastest Startup** (Startup optimization)
+- 🛡️ **Most Secure** (Security hardening)
+- ⚡ **Most Efficient** (Build caching & CI/CD)
 
 ---
 
-## 📂 Cấu trúc dự án
+## 📂 Project Structure
 
-Dự án được chia thành các modules theo ngôn ngữ/framework phổ biến:
+The project is organized into modules based on popular languages/frameworks:
 
 ### 1. 📘 [COOKBOOK.md](./COOKBOOK.md) (Core Guide)
-Tài liệu nền tảng, áp dụng cho mọi ngôn ngữ:
-- **Fundamentals**: Container vs VM, Layers, OCI.
+The foundational guide applicable to all stacks:
+- **Fundamentals**: Containers vs VMs, Layers, OCI standards.
 - **Size Optimization**: Multi-stage builds, UPX, Brotli.
-- **Security**: Non-root, distroless, scanning.
+- **Security**: Non-root users, distroless images, vulnerability scanning.
 - **BuildKit**: Cache mounts, secrets, SSH agents.
-- **CI/CD & Compose**: Patterns chuẩn cho DevOps.
+- **CI/CD & Compose**: Standard patterns for DevOps.
 
 ### 2. ☕ [Java / Spring Boot](./java/README.md)
-Tối ưu hóa cho hệ sinh thái Java:
-- **Zero-waste**: Custom JRE với `jlink` (~40MB JRE).
+Optimized for the Java ecosystem:
+- **Zero-waste**: Custom JRE with `jlink` (~40MB JRE).
 - **Fast Startup**: JVM Tuning, CDS, Spring Boot Layertools.
 - **Security**: Distroless images, auto-dependency updates.
 - **Native**: GraalVM Native Image compilation.
 
 ### 3. 🐍 [Python / FastAPI](./python/README.md)
-Tối ưu hóa cho Python backend:
-- **Performance**: `uv` package manager (nhanh gấp 10-100x pip), `PYTHONOPTIMIZE`.
-- **Compatibility**: Xử lý vấn đề `glibc` vs `musl` (Alpine).
+Optimized for Python backends:
+- **Performance**: `uv` package manager (10-100x faster than pip), `PYTHONOPTIMIZE`.
+- **Compatibility**: Solving `glibc` vs `musl` (Alpine) issues.
 - **Security**: Multi-arch Distroless, CVE auto-patching.
-- **Structure**: Virtual environments pattern.
+- **Structure**: Virtual environment patterns.
 
 ### 4. ⚛️ [React / Vite](./react/README.md)
-Tối ưu hóa cho Frontend SPA:
-- **Extreme Size**: Scratch image với static Nginx (~5MB).
+Optimized for Frontend SPAs:
+- **Extreme Size**: Scratch image with static Nginx (~5MB).
 - **Performance**: Pre-compression (Brotli/Gzip), Nginx caching strategy.
 - **Routing**: SPA fallback patterns.
 - **Alternatives**: Go FastHTTP server, BusyBox httpd.
@@ -47,9 +47,9 @@ Tối ưu hóa cho Frontend SPA:
 
 ## 🚀 Quick Start
 
-### Xem các ví dụ mẫu
+### Check out Examples
 
-Mỗi thư mục ngôn ngữ đều chứa các `Dockerfile` mẫu có thể chạy ngay:
+Each module contains ready-to-run `Dockerfile` examples:
 
 ```bash
 # Production ready
@@ -63,27 +63,27 @@ docker build -f python/Dockerfile.distroless -t python-secure ./python
 docker build -f react/Dockerfile.scratch -t react-minimal ./react
 ```
 
-### Sao chép và áp dụng
+### Copy and Apply
 
-1.  Tìm thư mục tương ứng với stack của bạn.
-2.  Đọc `README.md` trong thư mục đó để hiểu các concepts.
-3.  Copy `Dockerfile` mẫu.
-4.  Điều chỉnh tên file, port và build commands cho phù hợp dự án của bạn.
+1.  Navigate to the directory matching your stack.
+2.  Read the `README.md` to understand the concepts.
+3.  Copy the sample `Dockerfile`.
+4.  Adjust filenames, ports, and build commands to fit your project.
 
 ---
 
-## 💡 Philosophy (Triết lý)
+## 💡 Philosophy
 
-1.  **Defaults to Secure**: Luôn chạy non-root, readonly filesystem nếu có thể.
-2.  **Every Byte Counts**: Không để file rác, cache thừa trong production image.
-3.  **Build Once, Run Anywhere**: Tận dụng multi-platform builds.
-4.  **Fail Fast**: Healthcheck chuẩn, signal handling đúng cách.
+1.  **Defaults to Secure**: Always run as non-root, read-only filesystem where possible.
+2.  **Every Byte Counts**: No waste, no redundant caches in production images.
+3.  **Build Once, Run Anywhere**: Leverage multi-platform builds.
+4.  **Fail Fast**: Proper healthchecks and signal handling.
 
 ---
 
 ## 🤝 Contributing
 
-Mọi đóng góp (PR, Issue) đều được hoan nghênh! Hãy mở issue nếu bạn muốn request hướng dẫn cho framework khác (Golang, Rust, Node.js API...).
+All contributions (PRs, Issues) are welcome! Please open an issue if you'd like to request a guide for another framework (Golang, Rust, Node.js API, etc.).
 
 ---
 

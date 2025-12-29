@@ -2,7 +2,7 @@
 
 # =============================================================================
 # PYTHON PRODUCTION DOCKERFILE
-# Tổng hợp best practices: uv + alpine + security + optimization
+# Consolidates best practices: uv + alpine + security + optimization
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -16,14 +16,14 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 # -----------------------------------------------------------------------------
-# Stage 1: Builder - Install dependencies với uv
+# Stage 1: Builder - Install dependencies with uv
 # -----------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 # Install uv (modern, fast package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Build dependencies cho native packages
+# Build dependencies for native packages
 RUN apk add --no-cache \
     gcc \
     musl-dev \
@@ -35,7 +35,7 @@ WORKDIR /app
 # Copy dependency files
 COPY pyproject.toml uv.lock* ./
 
-# Install dependencies vào virtual environment với cache
+# Install dependencies into virtual environment with cache
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project 2>/dev/null || \
     uv pip install -r requirements.txt --target /app/.venv/lib/python${PYTHON_VERSION}/site-packages 2>/dev/null || \
@@ -44,7 +44,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy source code
 COPY src/ ./src/
 
-# Install project (nếu có pyproject.toml)
+# Install project (if pyproject.toml exists)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev 2>/dev/null || true
 
@@ -94,11 +94,11 @@ RUN addgroup -g 1000 -S appgroup && \
 
 WORKDIR /app
 
-# Copy virtual environment và source từ builder
+# Copy virtual environment and source from builder
 COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appgroup /app/src /app/src
 
-# Set PATH để sử dụng venv
+# Set PATH to use venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/src"
 
@@ -108,7 +108,7 @@ ENV HOST=0.0.0.0 \
     WORKERS=2 \
     LOG_LEVEL=INFO
 
-# Remove pip, setuptools từ runtime (không cần)
+# Remove pip, setuptools from runtime (not needed)
 RUN rm -rf \
     /usr/local/lib/python*/site-packages/pip* \
     /usr/local/lib/python*/site-packages/setuptools* \
@@ -137,6 +137,5 @@ STOPSIGNAL SIGTERM
 # Use tini as init system
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Run application
-# Thay đổi command phù hợp với project của bạn
+# Change command suitable for your project
 CMD ["python", "-m", "src.main"]

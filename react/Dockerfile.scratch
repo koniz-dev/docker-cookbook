@@ -2,7 +2,7 @@
 
 # =============================================================================
 # REACT/VITE SCRATCH DOCKERFILE
-# Ultra-minimal image với custom static Nginx + UPX compression
+# Ultra-minimal image with custom static Nginx + UPX compression
 # =============================================================================
 
 ARG NODE_VERSION=22
@@ -44,7 +44,7 @@ RUN pnpm build && \
     find dist -type f -name "*.map" -delete && \
     find dist -type f -name "*.LICENSE.*" -delete && \
     rm -f dist/stats.html && \
-    # Pre-compress với cả gzip và brotli
+    # Pre-compress with both gzip and brotli
     find dist -type f \( \
         -name "*.html" -o \
         -name "*.css" -o \
@@ -77,7 +77,7 @@ WORKDIR /tmp
 RUN curl -fSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" -o nginx.tar.gz && \
     tar -xzf nginx.tar.gz
 
-# Build static nginx với minimal modules
+# Build static nginx with minimal modules
 RUN cd nginx-${NGINX_VERSION} && \
     ./configure \
         --prefix=/usr/local/nginx \
@@ -127,7 +127,7 @@ RUN cd nginx-${NGINX_VERSION} && \
     make -j$(nproc) && \
     make install
 
-# Strip và compress binary
+# Strip and compress binary
 RUN strip --strip-all /usr/local/nginx/sbin/nginx && \
     upx --best --lzma /usr/local/nginx/sbin/nginx && \
     /usr/local/nginx/sbin/nginx -V
@@ -146,6 +146,7 @@ RUN cat > /tmp/healthcheck.c << 'EOF'
 #include <netinet/in.h>
 
 int main() {
+    // Write a minimal C program to connect to localhost:80
     struct hostent *h = gethostbyname("localhost");
     if (!h) return 1;
 

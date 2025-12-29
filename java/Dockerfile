@@ -2,7 +2,7 @@
 
 # =============================================================================
 # JAVA/SPRING BOOT PRODUCTION DOCKERFILE
-# Tổng hợp các best practices: jlink + layertools + security + JVM tuning
+# Combines best practices: jlink + layertools + security + JVM tuning
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -17,7 +17,7 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 # -----------------------------------------------------------------------------
-# Stage 1: Builder - Build JAR và tạo Custom JRE
+# Stage 1: Builder - Build JAR and create Custom JRE
 # -----------------------------------------------------------------------------
 FROM ${BUILD_IMAGE} AS builder
 
@@ -25,7 +25,7 @@ ENV GRADLE_USER_HOME=/cache/.gradle
 
 WORKDIR /build
 
-# Copy Gradle wrapper và config files (cho layer caching)
+# Copy Gradle wrapper and config files (for layer caching)
 COPY gradlew ./
 COPY gradle/ gradle/
 COPY build.gradle settings.gradle* ./
@@ -48,19 +48,19 @@ RUN mkdir -p /app && \
     mv build/libs/*.jar /app/app.jar
 
 # -----------------------------------------------------------------------------
-# Stage 2: JRE Builder - Tạo minimal JRE với jlink
+# Stage 2: JRE Builder - Create minimal JRE with jlink
 # -----------------------------------------------------------------------------
 FROM ${BUILD_IMAGE} AS jre-builder
 
 WORKDIR /app
 
-# Copy JAR từ builder
+# Copy JAR from builder
 COPY --from=builder /app/app.jar ./
 
-# Extract JAR để analyze dependencies
+# Extract JAR to analyze dependencies
 RUN jar xf app.jar
 
-# Analyze modules cần thiết
+# Analyze required modules
 RUN jdeps --ignore-missing-deps -q \
     --recursive \
     --multi-release 21 \
@@ -68,7 +68,7 @@ RUN jdeps --ignore-missing-deps -q \
     --class-path 'BOOT-INF/lib/*' \
     app.jar > deps.info
 
-# Tạo custom JRE với jlink
+# Create custom JRE with jlink
 RUN jlink \
     --add-modules $(cat deps.info) \
     --strip-debug \
@@ -78,7 +78,7 @@ RUN jlink \
     --output /custom-jre
 
 # -----------------------------------------------------------------------------
-# Stage 3: Layer Extractor - Tách Spring Boot layers
+# Stage 3: Layer Extractor - Separate Spring Boot layers
 # -----------------------------------------------------------------------------
 FROM ${BUILD_IMAGE} AS layer-extractor
 
@@ -126,13 +126,13 @@ COPY --from=jre-builder /custom-jre $JAVA_HOME
 # Set up application directory
 WORKDIR /app
 
-# Copy Spring Boot layers (theo thứ tự tối ưu caching)
+# Copy Spring Boot layers (in optimal caching order)
 COPY --from=layer-extractor --chown=appuser:appgroup /extracted/dependencies/ ./
 COPY --from=layer-extractor --chown=appuser:appgroup /extracted/spring-boot-loader/ ./
 COPY --from=layer-extractor --chown=appuser:appgroup /extracted/snapshot-dependencies/ ./
 COPY --from=layer-extractor --chown=appuser:appgroup /extracted/application/ ./
 
-# JVM Configuration cho Container
+# JVM Configuration for Container
 ENV JAVA_OPTS="\
     -XX:+UseContainerSupport \
     -XX:MaxRAMPercentage=75.0 \
@@ -163,5 +163,5 @@ STOPSIGNAL SIGTERM
 # Use tini as init system
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Run Spring Boot với JarLauncher (tối ưu cho layered JAR)
+# Run Spring Boot with JarLauncher (optimized for layered JAR)
 CMD ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
