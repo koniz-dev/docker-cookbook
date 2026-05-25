@@ -42,6 +42,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # -----------------------------------------------------------------------------
 FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS lib-collector
 
+# Re-declare so global ARG is visible inside this stage's RUN shell.
+# Image already sets PYTHON_VERSION=<patch> in ENV, which would otherwise shadow us.
+ARG PYTHON_VERSION
 ARG TARGETARCH
 
 # Copy shared libraries by architecture
@@ -89,7 +92,8 @@ RUN find .venv -type f \( -name '*.so*' -o -name '*.a' \) \
 FROM golang:1.23-alpine AS healthcheck-builder
 
 WORKDIR /build
-RUN cat > healthcheck.go << 'EOF'
+RUN go mod init healthcheck
+COPY <<'EOF' /build/healthcheck.go
 package main
 
 import (
@@ -122,6 +126,8 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o /healthcheck healthchec
 # -----------------------------------------------------------------------------
 FROM gcr.io/distroless/base-debian12:nonroot AS runtime
 
+# Make global ARGs visible inside this stage for COPY paths + labels.
+ARG PYTHON_VERSION
 ARG VERSION
 ARG BUILD_DATE
 ARG VCS_REF

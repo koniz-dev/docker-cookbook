@@ -1,0 +1,63 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  hadolint:
+    name: hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - go/Dockerfile
+          - go/Dockerfile.distroless
+          - go/Dockerfile.scratch
+          - python/Dockerfile
+          - python/Dockerfile.distroless
+          - node/Dockerfile
+          - node/Dockerfile.distroless
+          - java/Dockerfile
+          - java/Dockerfile.distroless
+          - react/Dockerfile
+          - react/Dockerfile.scratch
+          - rust/Dockerfile
+          - rust/Dockerfile.distroless
+          - bun/Dockerfile
+          - bun/Dockerfile.distroless
+          - dotnet/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          ignore: DL3008,DL3018,DL3059
+          failure-threshold: warning
+
+  markdownlint:
+    name: markdownlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            **/*.md
+            !node_modules/**
+            !**/dist/**
+
+  link-check:
+    name: markdown link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'

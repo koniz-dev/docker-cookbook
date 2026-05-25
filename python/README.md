@@ -124,11 +124,11 @@ Python applications have unique characteristics:
 
 ## 2. Base Images for Python
 
-| Image | Size | Pros | Cons | Recommendation |
-|-------|------|------|------|----------------|
-| `python:3.13-slim` | ~120MB | Compatible (glibc), standard | Slightly larger | **Default Choice** |
-| `python:3.13-alpine` | ~50MB | Smallest | Build issues (musl) | Only for pure Python apps |
-| `gcr.io/distroless/python3`| ~50MB | Secure, stripped | No shell/pip | Production Security |
+| Image | Bundled sample size | Pros | Cons | Recommendation |
+|-------|----|------|------|----------------|
+| `python:3.13-alpine` (this Dockerfile) | **107 MB** | Smallest base, multi-stage clean | Build issues for native deps (musl) | Default for pure Python |
+| `gcr.io/distroless/base + custom Python` (Dockerfile.distroless) | **107 MB** | Secure, no shell, multi-arch | Hard to debug, custom lib copying | Production Security |
+| `python:3.13-slim` | ~120MB | Compatible (glibc), standard | Slightly larger | Alternative if many native deps |
 
 ---
 

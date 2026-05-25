@@ -56,6 +56,23 @@ Optimized for Frontend SPAs:
 - **Performance**: Pre-compression (Gzip), Nginx caching strategy.
 - **Routing**: SPA fallback patterns.
 
+### 7. 🦀 [Rust / Axum](./rust/README.md)
+Optimized for Rust services:
+- **cargo-chef**: cached dependency builds.
+- **Static musl**: portable single binary.
+- **Distroless static**: ~9 MB final image.
+
+### 8. 🥟 [Bun](./bun/README.md)
+Optimized for Bun runtimes:
+- **`bun install`**: 5-20× faster than npm.
+- **`--compile`**: standalone executable for distroless deploys.
+
+### 9. 🟣 [.NET / ASP.NET Core](./dotnet/README.md)
+Optimized for .NET 9 services:
+- **Chiseled Ubuntu**: distroless-style runtime, glibc-based.
+- **Non-root by default** (UID 1654, `app` user).
+- **`CreateSlimBuilder`**: trim-friendly minimal API host.
+
 ---
 
 ## 🚀 Quick Start
@@ -65,21 +82,24 @@ Optimized for Frontend SPAs:
 Each module contains ready-to-run `Dockerfile` examples:
 
 ```bash
-# Production ready
-docker build -t java-app ./java
-docker build -t python-app ./python
-docker build -t node-app ./node
-docker build -t go-app ./go
-docker build -t react-app ./react
+# All variants in one shot via the Makefile
+make build       # build every cookbook-* image
+make sizes       # print a Markdown table of real measured sizes
+make sizes.md    # write SIZES.md
+./scripts/bench.sh   # cold start + RSS + throughput → BENCHMARKS.md
 
-# Extreme optimization / Security variants
+# Or build individually
+docker build -t java-app ./java
 docker build -f java/Dockerfile.distroless -t java-secure ./java
-docker build -f python/Dockerfile.distroless -t python-secure ./python
-docker build -f node/Dockerfile.distroless -t node-secure ./node
-docker build -f go/Dockerfile.distroless -t go-secure ./go
-docker build -f go/Dockerfile.scratch -t go-extreme ./go   # ULTIMATE (~2-5MB)
-docker build -f react/Dockerfile.scratch -t react-minimal ./react
+docker build -f go/Dockerfile.scratch -t go-extreme ./go
+# ...etc
 ```
+
+> **Sample apps** are included in each language folder (a minimal HTTP server
+> with `/` and `/health`). So `docker build ./go` works end-to-end against the
+> sample; swap in your own app code by replacing the sources.
+
+See [`SIZES.md`](./SIZES.md) and [`BENCHMARKS.md`](./BENCHMARKS.md) for live measurements, and [`docs/distroless-debugging.md`](./docs/distroless-debugging.md) for surviving when something breaks inside a shell-less image.
 
 ### Copy and Apply
 

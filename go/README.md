@@ -33,11 +33,13 @@ Go binaries can be large (~10-20MB for a simple app).
 
 ## 1. Overview
 
-| File | Description | Final Size | Use Case |
-|------|-------------|------------|----------|
-| `Dockerfile` | Alpine Runtime | ~15-25 MB | Development, debugging. Shell available. |
-| `Dockerfile.distroless` | Distroless Static | ~8-15 MB | High security. CA Certs included. No shell. |
-| `Dockerfile.scratch` | FROM scratch + UPX | ~2-5 MB | **EXTREME**. Minimal attack surface. Maximum performance. |
+Sizes below are measured against the bundled sample app (a stdlib HTTP server with `/` and `/health`). Real apps will differ by binary size, not by base-image overhead.
+
+| File | Description | Measured Size | Use Case |
+|------|-------------|---------------|----------|
+| `Dockerfile` | Alpine Runtime | **37.7 MB** | Development, debugging. Shell available. |
+| `Dockerfile.distroless` | Distroless Static + tzdata | **22.6 MB** | High security. CA Certs included. No shell. |
+| `Dockerfile.scratch` | FROM scratch + UPX | **5.5 MB** | **EXTREME**. Minimal attack surface. Maximum performance. |
 
 ```mermaid
 flowchart LR

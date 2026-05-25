@@ -276,10 +276,10 @@ Result: **~5MB Docker Image running Nginx!**
 
 ## 7. Comparison Table
 
-| Method | Image Size | Build Complexity | Performance | Use Case |
-|--------|------------|------------------|-------------|----------|
-| nginx:alpine | 25-30MB | Low | Excellent | Production standard |
-| Custom nginx (scratch) | 5-8MB | High | Excellent | Size-critical |
+| Method | Measured Size | Build Complexity | Performance | Use Case |
+|--------|---------------|------------------|-------------|----------|
+| nginx:alpine | **74.4 MB** | Low | Excellent | Production standard |
+| Custom nginx (scratch) | **4.3 MB** | High | Excellent | Size-critical |
 
 ---
 

@@ -1,0 +1,11 @@
+# Full stack: app + db + cache + reverse proxy + observability on one network.
+# Useful as a single command to bring up an end-to-end local demo.
+# Run: docker compose -f compose/docker-compose.full-stack.yml up
+
+name: cookbook-full-stack
+
+include:
+  - path: docker-compose.app-postgres.yml
+  - path: docker-compose.app-redis.yml
+  - path: docker-compose.reverse-proxy.yml
+  - path: docker-compose.observability.yml

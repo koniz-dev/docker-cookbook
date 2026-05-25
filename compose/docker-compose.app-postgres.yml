@@ -1,0 +1,46 @@
+# App + Postgres with healthcheck-gated startup.
+# Run from repo root:
+#   docker compose -f compose/docker-compose.app-postgres.yml up
+
+name: cookbook-app-postgres
+
+services:
+  app:
+    build:
+      context: ../node
+      dockerfile: Dockerfile
+    image: cookbook-node:compose
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://app:app@db:5432/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512M }
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  pgdata:

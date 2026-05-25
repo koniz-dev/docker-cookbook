@@ -1,0 +1,36 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitTypeAll(chore)",
+    "schedule:weekly",
+  ],
+  // Bump every pinned version in our Dockerfiles and lockfiles.
+  dockerfile: { enabled: true },
+  "docker-compose": { enabled: true },
+  // Keep pnpm + npm + uv + gradle wrapper fresh.
+  packageRules: [
+    {
+      matchManagers: ["dockerfile"],
+      pinDigests: false,
+      semanticCommitType: "chore",
+    },
+    {
+      matchPackageNames: ["pnpm"],
+      groupName: "pnpm",
+    },
+    {
+      matchPackageNames: ["ghcr.io/astral-sh/uv"],
+      groupName: "uv",
+    },
+    {
+      matchUpdateTypes: ["major"],
+      addLabels: ["major-bump"],
+      dependencyDashboardApproval: true,
+    },
+  ],
+  // Open at most 5 PRs at a time to avoid flooding.
+  prConcurrentLimit: 5,
+  prHourlyLimit: 2,
+}

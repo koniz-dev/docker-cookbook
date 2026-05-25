@@ -142,24 +142,19 @@ FROM alpine:${ALPINE_VERSION} AS healthcheck-builder
 
 RUN apk add --no-cache build-base upx
 
-RUN cat > /tmp/healthcheck.c << 'EOF'
-#include <netdb.h>
+COPY <<'EOF' /tmp/healthcheck.c
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 int main() {
-    // Write a minimal C program to connect to localhost:80
-    struct hostent *h = gethostbyname("localhost");
-    if (!h) return 1;
-
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return 1;
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(3000);
-    addr.sin_addr = *(struct in_addr *)h->h_addr_list[0];
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     int result = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     close(sock);
@@ -191,8 +186,7 @@ RUN mkdir -p \
 RUN echo "nobody:x:65534:65534:nobody:/:/sbin/nologin" > /rootfs/etc/passwd && \
     echo "nobody:x:65534:" > /rootfs/etc/group
 
-# Create main nginx.conf
-RUN cat > /rootfs/etc/nginx/nginx.conf << 'EOF'
+COPY <<'EOF' /rootfs/etc/nginx/nginx.conf
 worker_processes auto;
 error_log stderr warn;
 pid /run/nginx.pid;
@@ -223,32 +217,27 @@ http {
 }
 EOF
 
-# Create server config
-RUN cat > /rootfs/etc/nginx/conf.d/default.conf << 'EOF'
+COPY <<'EOF' /rootfs/etc/nginx/conf.d/default.conf
 server {
     listen 3000;
     server_name localhost;
-    
+
     root /usr/share/nginx/html;
     index index.html;
-    
-    # Security headers
+
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    
-    # SPA fallback
+
     location / {
         try_files $uri $uri/ /index.html;
     }
-    
-    # Cache static assets
+
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
-    
-    # No cache for index.html
+
     location = /index.html {
         expires -1;
         add_header Cache-Control "no-cache";
@@ -256,8 +245,7 @@ server {
 }
 EOF
 
-# Create mime.types
-RUN cat > /rootfs/etc/nginx/mime.types << 'EOF'
+COPY <<'EOF' /rootfs/etc/nginx/mime.types
 types {
     text/html html htm;
     text/css css;

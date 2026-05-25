@@ -81,8 +81,8 @@ FROM alpine:${ALPINE_VERSION} AS healthcheck-builder
 
 RUN apk add --no-cache build-base upx
 
-# Create minimal TCP healthcheck in C
-RUN cat > /tmp/healthcheck.c << 'EOF'
+# Minimal TCP healthcheck (C, statically linked)
+COPY <<'EOF' /tmp/healthcheck.c
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/socket.h>

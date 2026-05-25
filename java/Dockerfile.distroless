@@ -6,7 +6,9 @@
 # =============================================================================
 
 ARG JDK_VERSION=21
-ARG BUILD_IMAGE=eclipse-temurin:${JDK_VERSION}-jdk-alpine
+# Distroless runtime is glibc-based (debian12); JRE must therefore be built
+# on a glibc toolchain. Use the non-alpine temurin image here.
+ARG BUILD_IMAGE=eclipse-temurin:${JDK_VERSION}-jdk-noble
 
 ARG VERSION=0.0.1
 ARG BUILD_DATE
@@ -81,8 +83,7 @@ FROM ${BUILD_IMAGE} AS healthcheck-builder
 
 WORKDIR /app
 
-# Create Java healthcheck class
-RUN cat > HealthCheck.java << 'EOF'
+COPY <<'EOF' /app/HealthCheck.java
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.Instant;

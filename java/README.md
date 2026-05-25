@@ -428,10 +428,12 @@ HEALTHCHECK CMD ["java", "HealthCheck"]
 
 This directory contains variants:
 
-| File | Description | Size | Use Case |
-|------|-------------|------|----------|
-| `Dockerfile` | Standard production build | ~100MB | Default choice |
-| `Dockerfile.distroless` | Maximum security | ~110MB | Security-critical |
+| File | Description | Measured Size | Use Case |
+|------|-------------|---------------|----------|
+| `Dockerfile` | Custom JRE (jlink) + Alpine | **171 MB** | Default choice |
+| `Dockerfile.distroless` | Custom JRE + Distroless base-debian12 | **181 MB** | Security-critical |
+
+> Distroless is slightly *larger* here than Alpine because `distroless/base-debian12` carries glibc + a few base libs; you save ~50 MB of OS userland vs full Debian but Alpine has even less.
 
 ---
 

@@ -47,8 +47,11 @@ FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS h
 
 WORKDIR /build
 
-# Create a minimal Go healthcheck program
-RUN cat > healthcheck.go << 'EOF'
+# Initialise a tiny module for the healthcheck binary
+RUN go mod init healthcheck
+
+# Healthcheck source (BuildKit heredoc → COPY a file from inline content)
+COPY <<'EOF' /build/healthcheck.go
 package main
 
 import (
@@ -62,14 +65,12 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://localhost:" + port + "/health")
 	if err != nil {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == http.StatusOK {
 		os.Exit(0)
 	}

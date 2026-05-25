@@ -1,0 +1,50 @@
+# Caddy reverse proxy in front of the Node sample.
+# Caddy auto-issues a TLS cert from its local CA (trust it once via:
+#   docker compose exec proxy caddy trust)
+# Run: docker compose -f compose/docker-compose.reverse-proxy.yml up
+
+name: cookbook-reverse-proxy
+
+services:
+  app:
+    build:
+      context: ../node
+      dockerfile: Dockerfile
+    networks: [internal]
+
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    depends_on: [app]
+    networks: [internal, public]
+    restart: unless-stopped
+
+configs:
+  caddyfile:
+    content: |
+      localhost {
+        reverse_proxy app:3000
+        encode zstd gzip
+        header {
+          Strict-Transport-Security "max-age=31536000"
+          X-Content-Type-Options "nosniff"
+          Referrer-Policy "strict-origin-when-cross-origin"
+        }
+      }
+
+networks:
+  internal: {}
+  public:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -16,13 +16,16 @@ ARG VERSION=0.1.0
 ARG BUILD_DATE
 ARG VCS_REF
 
+# Pin uv via a named stage so the version reference is resolved at parse time.
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Install dependencies with uv
 # -----------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Install uv (modern, fast package manager). Pin version for reproducible builds.
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+# Install uv (pinned version) from the dedicated stage above
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Build dependencies for native packages
 RUN apk add --no-cache \

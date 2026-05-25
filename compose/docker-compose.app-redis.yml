@@ -1,0 +1,29 @@
+# Python sample + Redis cache.
+# Run: docker compose -f compose/docker-compose.app-redis.yml up
+
+name: cookbook-app-redis
+
+services:
+  app:
+    build:
+      context: ../python
+      dockerfile: Dockerfile
+    image: cookbook-python:compose
+    environment:
+      REDIS_URL: redis://cache:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      cache:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    restart: unless-stopped

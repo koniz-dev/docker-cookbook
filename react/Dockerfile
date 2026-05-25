@@ -88,28 +88,28 @@ LABEL org.opencontainers.image.title="React Application" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.base.name="nginx:alpine"
 
-# Remove default nginx config
+# Remove default nginx config + bundled assets
 RUN rm -rf /etc/nginx/conf.d/default.conf /usr/share/nginx/html/*
 
-# Create nginx config with SPA support
-RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+# Nginx config with SPA support (BuildKit heredoc → file)
+COPY <<'EOF' /etc/nginx/conf.d/default.conf
 server {
     listen 3000;
     server_name localhost;
-    
+
     root /usr/share/nginx/html;
     index index.html;
-    
+
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;" always;
-    
+
     # Hide nginx version
     server_tokens off;
-    
+
     # Gzip settings
     gzip on;
     gzip_static on;
@@ -123,26 +123,26 @@ server {
         application/json
         application/xml
         image/svg+xml;
-    
+
     # SPA fallback - important for client-side routing
     location / {
         try_files $uri $uri/ /index.html;
     }
-    
+
     # Long cache for static assets (hashed filenames)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
     }
-    
+
     # Do not cache index.html to ensure fresh version
     location = /index.html {
         expires -1;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         add_header Pragma "no-cache";
     }
-    
+
     # Health check endpoint
     location = /health {
         access_log off;

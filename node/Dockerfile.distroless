@@ -58,9 +58,8 @@ FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
 
 WORKDIR /build
 
-# Create a self-contained healthcheck script
-# This will be executed by the Node.js runtime in distroless
-RUN cat > healthcheck.mjs << 'EOF'
+# Self-contained healthcheck script run by the Node.js runtime in distroless
+COPY <<'EOF' /build/healthcheck.mjs
 import http from 'http';
 
 const options = {

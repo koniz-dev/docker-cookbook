@@ -81,10 +81,12 @@ RUN pnpm install --prod --frozen-lockfile
 
 This directory contains optimized Dockerfiles for Node.js applications (Express, NestJS, Fastify, etc.).
 
-| File | Description | Use Case |
-|------|-------------|----------|
-| `Dockerfile` | Standard Production | General purpose, balanced size/debuggability. |
-| `Dockerfile.distroless` | Maximum Security | High compliance, banking/fintech, zero-shell environments. |
+| File | Description | Measured Size | Use Case |
+|------|-------------|---------------|----------|
+| `Dockerfile` | Standard Production (alpine + tini) | **234 MB** | General purpose, balanced size/debuggability. |
+| `Dockerfile.distroless` | Maximum Security | **210 MB** | High compliance, banking/fintech, zero-shell environments. |
+
+> Node.js runtime itself dominates the image size. Most of the 200+ MB is the JS engine + libc, not user code.
 
 ---
 
