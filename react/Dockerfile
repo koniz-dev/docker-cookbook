@@ -11,6 +11,7 @@
 ARG NODE_VERSION=22
 ARG ALPINE_VERSION=3.21
 ARG NGINX_VERSION=1.27
+ARG PNPM_VERSION=9.15.0
 
 ARG VERSION=1.0.0
 ARG BUILD_DATE
@@ -19,12 +20,14 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Build React app
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine AS builder
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Enable pnpm
+ARG PNPM_VERSION
+
+# Enable pnpm (pinned version)
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Install gzip for pre-compression
 RUN apk add --no-cache gzip

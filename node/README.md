@@ -39,17 +39,41 @@ Node.js is not designed to run as PID 1 (Init process). It does not properly han
 *   **Optimization**: Use `npm ci`, `yarn install --frozen-lockfile`, or `pnpm install --frozen-lockfile` for reproducible builds.
 *   **Pruning**: Always remove `devDependencies` in the final production image.
 
-### pnpm deploy (Advanced Pruning)
-`pnpm deploy` is a powerful command that creates a **minimal production bundle**:
-*   Copies only production dependencies (no devDependencies).
-*   Includes only the files specified in `package.json` (`files` field).
-*   Creates a clean, isolated directory ready for deployment.
+### Pruning production dependencies
+For a clean production tree without devDependencies, use a dedicated pruner
+stage that runs `pnpm install --prod --frozen-lockfile` against the lockfile.
+This pattern works for both single-package repos and pnpm workspaces.
 
-```bash
-# In Dockerfile
-pnpm deploy --prod --filter=. /prod
-# Then copy /prod to runtime stage
+```mermaid
+flowchart LR
+    subgraph builder[Stage 1: Builder]
+        B1[pnpm install<br/>ALL deps] --> B2[pnpm build<br/>tsc → dist/]
+    end
+    subgraph pruner[Stage 2: Pruner]
+        P1[Copy package.json<br/>+ lockfile + dist] --> P2[pnpm install --prod]
+    end
+    subgraph runtime[Stage 3: Runtime]
+        R1[tini + node user]
+    end
+    builder -- "package.json, lockfile, dist/" --> pruner
+    pruner -- "/prod (prod deps + dist)" --> R1
+
+    classDef heavy fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    classDef light fill:#dcfce7,stroke:#15803d,color:#14532d;
+    class builder heavy;
+    class runtime light;
 ```
+
+```dockerfile
+# In a separate pruner stage:
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=builder /app/dist ./dist
+RUN pnpm install --prod --frozen-lockfile
+```
+
+> `pnpm deploy --filter=.` is a workspace-only command and will fail in a
+> single-package repo. The Dockerfiles in this directory use the
+> install-based pattern above instead.
 
 ---
 
@@ -66,11 +90,11 @@ This directory contains optimized Dockerfiles for Node.js applications (Express,
 
 ## 2. Base Images
 
-### `node:20-alpine` (Recommended)
+### `node:22-alpine` (Recommended)
 *   **Pros**: Smallest size (~40MB compressed), highly optimized.
 *   **Cons**: Uses `musl` libc instead of `glibc`. Some native modules (like sharp, tensorflow) might need extra compilation steps.
 
-### `node:20-slim` (Debian Slim)
+### `node:22-slim` (Debian Slim)
 *   **Pros**: Uses `glibc`, better compatibility with native modules.
 *   **Cons**: Larger than Alpine.
 
@@ -86,18 +110,19 @@ This directory contains optimized Dockerfiles for Node.js applications (Express,
 Separate build dependencies from runtime requirements.
 
 ```dockerfile
-# Stage 1: Dependencies
-FROM node:20-alpine AS deps
-RUN pnpm install --prod
+# Stage 1: Builder — full deps + build
+FROM node:22-alpine AS builder
+RUN pnpm install --frozen-lockfile && pnpm build
 
-# Stage 2: Builder
-FROM node:20-alpine AS builder
-RUN pnpm install && pnpm build
-
-# Stage 3: Runner
-FROM node:20-alpine AS runner
-COPY --from=deps /app/node_modules ./node_modules
+# Stage 2: Pruner — production-only deps in a clean tree
+FROM node:22-alpine AS pruner
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 COPY --from=builder /app/dist ./dist
+RUN pnpm install --prod --frozen-lockfile
+
+# Stage 3: Runtime
+FROM node:22-alpine AS runtime
+COPY --from=pruner /prod ./
 ```
 
 ### Dependency Caching with BuildKit

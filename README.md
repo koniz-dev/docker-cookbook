@@ -52,10 +52,9 @@ Optimized for Go Applications:
 
 ### 6. ⚛️ [React / Vite](./react/README.md)
 Optimized for Frontend SPAs:
-- **Extreme Size**: Scratch image with static Nginx (~5MB).
-- **Performance**: Pre-compression (Brotli/Gzip), Nginx caching strategy.
+- **Extreme Size**: Scratch image with statically compiled Nginx (~5MB).
+- **Performance**: Pre-compression (Gzip), Nginx caching strategy.
 - **Routing**: SPA fallback patterns.
-- **Alternatives**: Go FastHTTP server, BusyBox httpd.
 
 ---
 

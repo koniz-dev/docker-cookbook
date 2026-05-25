@@ -31,27 +31,29 @@
 
 ### Container vs Virtual Machine
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Virtual Machine vs Container                         │
-├─────────────────────────────────┬───────────────────────────────────────┤
-│         Virtual Machine         │              Container                │
-├─────────────────────────────────┼───────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐        │   ┌─────────┐ ┌─────────┐             │
-│  │  App A  │ │  App B  │        │   │  App A  │ │  App B  │             │
-│  ├─────────┤ ├─────────┤        │   ├─────────┤ ├─────────┤             │
-│  │  Bins/  │ │  Bins/  │        │   │  Bins/  │ │  Bins/  │             │
-│  │  Libs   │ │  Libs   │        │   │  Libs   │ │  Libs   │             │
-│  ├─────────┤ ├─────────┤        │   └────┬────┘ └────┬────┘             │
-│  │Guest OS │ │Guest OS │        │        └─────┬─────┘                  │
-│  └────┬────┘ └────┬────┘        │     Container Runtime (Docker)        │
-│       └─────┬─────┘             │              │                        │
-│       Hypervisor                │              │                        │
-│           │                     │              │                        │
-│       Host OS                   │          Host OS                      │
-│           │                     │              │                        │
-│       Hardware                  │          Hardware                     │
-└─────────────────────────────────┴───────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph VM[Virtual Machine]
+        direction TB
+        VMA1[App A] --> VMB1[Bins/Libs A] --> VMG1[Guest OS A]
+        VMA2[App B] --> VMB2[Bins/Libs B] --> VMG2[Guest OS B]
+        VMG1 --> HYP[Hypervisor]
+        VMG2 --> HYP
+        HYP --> VMHOST[Host OS] --> VMHW[Hardware]
+    end
+    subgraph CT[Container]
+        direction TB
+        CA1[App A] --> CB1[Bins/Libs A]
+        CA2[App B] --> CB2[Bins/Libs B]
+        CB1 --> CR[Container Runtime - Docker]
+        CB2 --> CR
+        CR --> CHOST[Host OS] --> CHW[Hardware]
+    end
+
+    classDef heavy fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    classDef light fill:#dcfce7,stroke:#15803d,color:#14532d;
+    class VMG1,VMG2,HYP heavy;
+    class CR light;
 ```
 
 | Aspect | Virtual Machine | Container |
@@ -74,7 +76,7 @@ Docker images are built from stacked **layers**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Container (Read-Write)                    │
+│                    Container (Read-Write)                   │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 5: COPY . . (Source code)                      [2MB]  │ ← Changes frequently
 ├─────────────────────────────────────────────────────────────┤
@@ -106,7 +108,7 @@ Docker uses a **Union Filesystem** to stack layers:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Merged View (Container sees)             │
-│  /app/index.js, /node_modules/*, /etc/*, /usr/*            │
+│  /app/index.js, /node_modules/*, /etc/*, /usr/*             │
 └─────────────────────────────────────────────────────────────┘
                               ▲
                               │ Union Mount
@@ -133,7 +135,7 @@ An open governance structure for container formats and runtimes.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OCI Image Specification                   │
+│                    OCI Image Specification                  │
 ├─────────────────────────────────────────────────────────────┤
 │  Image Manifest     → Layers and config description         │
 │  Image Config       → Metadata (env, cmd, labels)           │
@@ -172,7 +174,7 @@ export DOCKER_BUILDKIT=1
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              Image Size Impact                               │
+│              Image Size Impact                              │
 ├─────────────────────────────────────────────────────────────┤
 │  📦 Storage Cost     → Larger image = more $/GB             │
 │  🚀 Deploy Speed     → Larger image = slower pull           │
@@ -198,6 +200,25 @@ export DOCKER_BUILDKIT=1
 ## 1. Multi-stage Builds
 
 Multi-stage builds allow you to separate the build environment from the runtime environment, significantly reducing the final image size.
+
+```mermaid
+flowchart LR
+    subgraph builder[Builder stage - heavy]
+        direction TB
+        B1[Base: node:20] --> B2[Install deps] --> B3[Compile/Build]
+    end
+    subgraph runtime[Runtime stage - minimal]
+        direction TB
+        R1[Base: nginx:alpine] --> R2[Copy artifacts only]
+    end
+    B3 -- "COPY --from=builder" --> R2
+    runtime --> OUT[(Final image<br/>~5-25 MB)]
+
+    classDef big fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    classDef small fill:#dcfce7,stroke:#15803d,color:#14532d;
+    class builder big
+    class runtime,OUT small
+```
 
 ### Basic Pattern
 
@@ -245,26 +266,18 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 ### Decision Tree
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Choose Base Image                        │
-└─────────────────────────────────────────────────────────────┘
-                            │
-            ┌───────────────┴───────────────┐
-            ▼                               ▼
-    Static binary?                    Dynamic linking?
-    (Go, Rust, C)                     (Python, Node, Java)
-            │                               │
-            ▼                               ▼
-        scratch                    High security needed?
-                                          │
-                          ┌───────────────┴───────────────┐
-                          ▼                               ▼
-                    distroless                      Debug needed?
-                                                          │
-                                          ┌───────────────┴───────────────┐
-                                          ▼                               ▼
-                                    debian-slim                        alpine
+```mermaid
+flowchart TD
+    A[Choose Base Image] --> B{Static binary?<br/>Go, Rust, C}
+    B -- Yes --> C([scratch])
+    B -- No --> D{High security<br/>required?}
+    D -- Yes --> E([distroless])
+    D -- No --> F{Need shell<br/>for debugging?}
+    F -- Yes --> G([alpine])
+    F -- No --> H([debian-slim])
+
+    classDef pick fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    class C,E,G,H pick;
 ```
 
 ### Image Pinning
@@ -288,6 +301,26 @@ Reason: Digests ensure reproducible builds and prevent supply chain attacks (e.g
 ### Layer Caching Principles
 
 Docker caches each layer. If one layer changes, all subsequent layers must be rebuilt.
+
+```mermaid
+flowchart TD
+    L1[Layer 1: FROM base image] --> L2[Layer 2: system deps]
+    L2 --> L3[Layer 3: COPY manifest]
+    L3 --> L4[Layer 4: install app deps]
+    L4 --> L5[Layer 5: COPY source code]
+
+    Edit(["You edit src/main.py"]) -.invalidates.-> L5
+    L5 -. miss .-> Rebuild5[rebuild L5 only]
+    L1 -. hit .-> Cached1[cached]
+    L2 -. hit .-> Cached2[cached]
+    L3 -. hit .-> Cached3[cached]
+    L4 -. hit .-> Cached4[cached]
+
+    classDef hit fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef miss fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    class Cached1,Cached2,Cached3,Cached4 hit;
+    class Rebuild5 miss;
+```
 
 **Order by frequency of change (Least → Most):**
 
@@ -736,6 +769,23 @@ docker buildx build \
 
 ## 12. CI/CD Integration
 
+```mermaid
+flowchart LR
+    A[git push] --> B[Checkout]
+    B --> C[Setup Buildx]
+    C --> D[Login registry]
+    D --> E[Build multi-arch<br/>amd64 + arm64]
+    E --> F[Trivy scan]
+    F -->|HIGH/CRITICAL CVE| X([Fail build])
+    F -->|clean| G[Push image]
+    G --> H[Upload SARIF<br/>to GitHub Security]
+
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef bad fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    class G,H ok;
+    class X bad;
+```
+
 ### GitHub Actions Workflow
 
 ```yaml
@@ -976,7 +1026,7 @@ docker buildx build \
 
 ```yaml
 # docker-compose.yml
-version: '3.8'
+# Note: `version:` key is obsolete in Compose v2+ and intentionally omitted.
 
 services:
   app:
@@ -1011,7 +1061,6 @@ services:
 
 ```yaml
 # docker-compose.override.yml (auto-loaded)
-version: '3.8'
 
 services:
   app:
@@ -1031,7 +1080,6 @@ services:
 
 ```yaml
 # docker-compose.prod.yml
-version: '3.8'
 
 services:
   app:
@@ -1074,4 +1122,4 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ---
 
-*Generated from docker-cookbook project • Last updated: 2025-12-29*
+*Generated from docker-cookbook project*

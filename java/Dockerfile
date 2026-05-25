@@ -133,7 +133,8 @@ COPY --from=layer-extractor --chown=appuser:appgroup /extracted/snapshot-depende
 COPY --from=layer-extractor --chown=appuser:appgroup /extracted/application/ ./
 
 # JVM Configuration for Container
-ENV JAVA_OPTS="\
+# Use JDK_JAVA_OPTIONS so `java` picks up tuning flags even with exec form CMD.
+ENV JDK_JAVA_OPTIONS="\
     -XX:+UseContainerSupport \
     -XX:MaxRAMPercentage=75.0 \
     -XX:InitialRAMPercentage=50.0 \
@@ -160,8 +161,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 # Graceful shutdown
 STOPSIGNAL SIGTERM
 
-# Use tini as init system
-ENTRYPOINT ["/sbin/tini", "--"]
+# Use tini as init system; exec form so signals reach the JVM directly.
+ENTRYPOINT ["/sbin/tini", "--", "java"]
 
 # Run Spring Boot with JarLauncher (optimized for layered JAR)
-CMD ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+CMD ["org.springframework.boot.loader.launch.JarLauncher"]

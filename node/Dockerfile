@@ -2,11 +2,12 @@
 
 # =============================================================================
 # NODE.JS PRODUCTION DOCKERFILE (ADVANCED)
-# Best practices: Multi-stage + pnpm deploy + Tini + Security + Pruning
+# Best practices: Multi-stage + pnpm pruning + Tini + Security
 # =============================================================================
 
 ARG NODE_VERSION=22
 ARG ALPINE_VERSION=3.21
+ARG PNPM_VERSION=9.15.0
 
 ARG VERSION=1.0.0
 ARG BUILD_DATE
@@ -17,10 +18,12 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Enable pnpm
+ARG PNPM_VERSION
+
+# Enable pnpm (pinned version)
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /app
 
@@ -38,23 +41,27 @@ COPY . .
 RUN pnpm build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Pruner - Create minimal production bundle using pnpm deploy
+# Stage 2: Pruner - Install production-only deps in a clean tree
 # -----------------------------------------------------------------------------
+# Uses `pnpm install --prod --frozen-lockfile` which works for both single
+# packages and workspaces. (`pnpm deploy` is workspace-only and was replaced.)
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS pruner
+
+ARG PNPM_VERSION
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-WORKDIR /app
+WORKDIR /prod
 
-# Copy built application
-COPY --from=builder /app ./
+# Copy manifests + built artifacts from the builder
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=builder /app/dist ./dist
 
-# Use pnpm deploy to create a minimal production bundle
-# This copies only production dependencies and the specified files
-# Result: Clean node_modules with NO devDependencies, NO extraneous files
-RUN pnpm deploy --prod --filter=. /prod
+# Install production dependencies only
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile
 
 # -----------------------------------------------------------------------------
 # Stage 3: Runtime - Clean production image
@@ -68,7 +75,7 @@ ARG VCS_REF
 
 # OCI Labels
 LABEL org.opencontainers.image.title="Node.js API" \
-      org.opencontainers.image.description="Production-ready Node.js with pnpm deploy" \
+      org.opencontainers.image.description="Production-ready Node.js with pruned production deps" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
@@ -84,8 +91,7 @@ RUN apk add --no-cache tini
 ENV NODE_ENV=production \
     PORT=3000
 
-# Copy deployed application from pruner stage
-# This contains ONLY production deps and dist
+# Copy pruned production tree from pruner stage (only prod deps + dist)
 COPY --from=pruner --chown=node:node /prod ./
 
 # Switch to non-root user (node user is built-in, UID 1000)

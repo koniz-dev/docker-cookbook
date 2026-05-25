@@ -37,6 +37,20 @@ Many Python libraries (numpy, pandas, psycopg2) are C extensions. PyPI provides 
 - On **Debian/Slim**: pip downloads the wheel and runs immediately → Fast.
 - On **Alpine**: pip cannot find a wheel for musl → Compiles from source → Requires GCC, headers → Slow & error-prone.
 
+```mermaid
+flowchart TD
+    A["pip install numpy"] --> B{base OS?}
+    B -- "debian-slim (glibc)" --> C[Find manylinux wheel] --> D([install in seconds])
+    B -- "alpine (musl)" --> E{musllinux wheel<br/>available?}
+    E -- yes --> D
+    E -- no --> F[Download tarball] --> G[Need gcc + headers<br/>compile from source] --> H([slow + may fail])
+
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef bad fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    class D ok;
+    class H bad;
+```
+
 ### What are Python Wheels?
 
 Wheel (`.whl`) is a binary distribution format for Python packages.
@@ -130,11 +144,14 @@ Python applications have unique characteristics:
 - Drop-in replacement (`uv pip install`).
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Pin a specific uv version (avoid :latest)
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
 
-# Install deps
+# Install deps into a venv (preferred over --system)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r requirements.txt
+    uv pip install -r requirements.txt
 ```
 
 ---
@@ -189,7 +206,7 @@ Or remove manually:
 RUN find . -type d -name __pycache__ -exec rm -r {} +
 ```
 
-### 4.5 Aggressive Optimization (Extreme Size Reduction)
+### 4.4 Aggressive Optimization (Extreme Size Reduction)
 
 Extreme optimization to minimize image size:
 
@@ -209,7 +226,7 @@ RUN apk add --no-cache binutils && \
         -prune -exec rm -rf {} + 2>/dev/null || true
 ```
 
-### 4.6 PYTHONOPTIMIZE - Bytecode Optimization
+### 4.5 PYTHONOPTIMIZE - Bytecode Optimization
 
 ```dockerfile
 # Level 0: No optimization
@@ -224,7 +241,7 @@ ENV PYTHONOPTIMIZE=2
 | 1 | `-O` | Remove asserts | ~5% |
 | 2 | `-OO` | Remove asserts + docstrings | ~10-15% |
 
-### 4.7 CVE Auto-fix during Build
+### 4.6 CVE Auto-fix during Build
 
 Auto-patch CVEs by parsing `pyproject.toml` and upgrading vulnerable packages.
 
@@ -319,7 +336,6 @@ HEALTHCHECK --interval=30s --timeout=3s \
 ### FastAPI Development Setup
 
 ```yaml
-version: '3.8'
 services:
   api:
     build: .

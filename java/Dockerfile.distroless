@@ -149,7 +149,9 @@ COPY --from=layer-extractor /extracted/application/ ./
 COPY --from=healthcheck-builder /app/HealthCheck.class ./
 
 # JVM Configuration
-ENV JAVA_OPTS="\
+# Use JDK_JAVA_OPTIONS so flags are applied by `java` itself,
+# which keeps ENTRYPOINT/CMD in exec form (no shell needed in distroless).
+ENV JDK_JAVA_OPTIONS="\
     -XX:+UseContainerSupport \
     -XX:MaxRAMPercentage=75.0 \
     -XX:InitialRAMPercentage=50.0 \
@@ -171,6 +173,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 STOPSIGNAL SIGTERM
 
-# Run with exec form (distroless has no shell)
+# Run with exec form (distroless has no shell). JDK_JAVA_OPTIONS above applies automatically.
 ENTRYPOINT ["java"]
 CMD ["org.springframework.boot.loader.launch.JarLauncher"]

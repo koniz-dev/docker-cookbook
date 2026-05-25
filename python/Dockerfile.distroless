@@ -24,19 +24,18 @@ ARG TARGETARCH
 WORKDIR /build
 
 # Copy dependency files
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml uv.lock ./
 
 # Install dependencies with cache
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project 2>/dev/null || \
-    echo "No lock file, skipping sync"
+    uv sync --frozen --no-dev --no-install-project
 
 # Copy source code
 COPY src/ src/
 
 # Install project
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev 2>/dev/null || true
+    uv sync --frozen --no-dev
 
 # -----------------------------------------------------------------------------
 # Stage 2: Shared Libraries Collector
@@ -60,8 +59,8 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     cp /lib/${LIBARCH}-linux-gnu/libm.so.6 /lib/multi-arch/ && \
     cp /lib/${LIBARCH}-linux-gnu/libz.so.1 /lib/multi-arch/ && \
     cp /lib/${LIBARCH}-linux-gnu/libgcc_s.so.1 /lib/multi-arch/ && \
-    # Python shared library
-    cp /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /lib/multi-arch/ 2>/dev/null || true
+    # Python shared library (required — fail the build if missing)
+    cp /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /lib/multi-arch/
 
 # -----------------------------------------------------------------------------
 # Stage 3: Optimizer - Strip and clean
@@ -73,18 +72,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends binutils && \
 
 WORKDIR /build
 
-# Aggressive optimization
+# Aggressive optimization. `strip --strip-all` exits non-zero on already-stripped
+# files, so allow that one to be lenient; the rest must succeed.
 RUN find .venv -type f \( -name '*.so*' -o -name '*.a' \) \
-        -exec strip --strip-all {} + 2>/dev/null || true && \
+        -exec strip --strip-all {} + 2>/dev/null; \
     find .venv \( -type d -name __pycache__ -o -type f -name '*.py[co]' \) \
-        -delete 2>/dev/null || true && \
+        -delete && \
     find .venv -type d \( -name tests -o -name test -o -name docs \) \
-        -prune -exec rm -rf {} + 2>/dev/null || true && \
+        -prune -exec rm -rf {} + && \
     find .venv -type f \( -name '*.pyi' -o -name '*.c' -o -name '*.h' \) \
-        -delete 2>/dev/null || true
+        -delete
 
 # -----------------------------------------------------------------------------
-# Stage 4: Runtime - Distroless (maximum security)
+# Stage 4: Healthcheck builder - tiny static Go binary (no shell in distroless)
+# -----------------------------------------------------------------------------
+FROM golang:1.23-alpine AS healthcheck-builder
+
+WORKDIR /build
+RUN cat > healthcheck.go << 'EOF'
+package main
+
+import (
+	"net/http"
+	"os"
+	"time"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://localhost:" + port + "/health")
+	if err != nil {
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		os.Exit(0)
+	}
+	os.Exit(1)
+}
+EOF
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o /healthcheck healthcheck.go
+
+# -----------------------------------------------------------------------------
+# Stage 5: Runtime - Distroless (maximum security)
 # -----------------------------------------------------------------------------
 FROM gcr.io/distroless/base-debian12:nonroot AS runtime
 
@@ -129,12 +163,16 @@ ENV PATH="/app/.venv/bin/:$PATH" \
     WORKERS=2 \
     LD_LIBRARY_PATH=/lib/multi-arch
 
+# Copy static healthcheck binary
+COPY --from=healthcheck-builder /healthcheck /healthcheck
+
 # Default nonroot user in distroless (UID 65532)
 
-EXPOSE ${PORT}
+EXPOSE 8000
 
-# Distroless has no shell, cannot use curl/wget
-# Healthcheck must rely on orchestrator (K8s, Docker Compose)
+# Healthcheck via static binary (distroless has no shell/curl).
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/healthcheck"]
 
 STOPSIGNAL SIGTERM
 

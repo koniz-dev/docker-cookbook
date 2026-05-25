@@ -79,6 +79,28 @@ app.jar (100MB)
 - Dependencies rarely change but are pushed repeatedly.
 - **Solution**: Spring Boot Layertools (see section 5).
 
+```mermaid
+flowchart LR
+    subgraph fat[Fat JAR - 100 MB]
+        F1[dependencies 98 MB]
+        F2[your code 2 MB]
+    end
+    fat -- "layertools extract" --> SPLIT
+    subgraph SPLIT[Split into 4 layers]
+        direction TB
+        D[dependencies<br/>stable, cached]
+        L[spring-boot-loader<br/>stable, cached]
+        S[snapshot-dependencies<br/>changes weekly]
+        A[application<br/>changes every commit]
+    end
+    SPLIT --> PUSH[On code change<br/>push only 'application' layer]
+
+    classDef stable fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef vol fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    class D,L stable;
+    class A vol;
+```
+
 ### Java Platform Module System (JPMS) - Needed for jlink
 
 JPMS (Java 9+) splits the JDK into modular components:
@@ -162,6 +184,24 @@ java -Xshare:on -XX:SharedArchiveFile=app-cds.jsa -jar app.jar
 ```
 
 **💡 CDS reduces startup time by 10-30%** by skipping class parsing and verification.
+
+```mermaid
+sequenceDiagram
+    participant Build as Build pipeline
+    participant JVM1 as JVM (training run)
+    participant Disk
+    participant JVM2 as JVM (prod run)
+
+    Build->>JVM1: java -XX:DumpLoadedClassList -jar app.jar
+    JVM1->>Disk: write classes.lst
+    Build->>JVM1: java -Xshare:dump -SharedArchiveFile=app-cds.jsa
+    JVM1->>Disk: write app-cds.jsa (memory-mappable)
+    Note over Build,Disk: bake classes.lst + .jsa into image
+
+    JVM2->>Disk: mmap app-cds.jsa at startup
+    Disk-->>JVM2: pre-parsed class metadata
+    Note over JVM2: skip parse + verify<br/>startup 10-30% faster
+```
 
 ---
 
@@ -467,7 +507,6 @@ CMD ["/app"]
 ### Development Setup
 
 ```yaml
-version: '3.8'
 services:
   app:
     build:

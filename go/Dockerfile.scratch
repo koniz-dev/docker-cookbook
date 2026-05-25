@@ -6,13 +6,16 @@
 # Final image size: ~2-5MB (depending on your app)
 # =============================================================================
 
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.21
 
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Compile Go binary
 # -----------------------------------------------------------------------------
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+ARG TARGETARCH
+ARG TARGETOS
 
 # Install UPX for binary compression
 RUN apk add --no-cache upx
@@ -33,31 +36,38 @@ COPY . .
 # -trimpath: Remove file paths for reproducibility
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -extldflags '-static'" \
-    -trimpath \
-    -o app ./cmd/main.go || \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o app .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+        -ldflags="-s -w -extldflags '-static'" \
+        -trimpath \
+        -o app .
 
 # Compress binary with UPX (Ultra Brute mode for maximum compression)
 # --best --lzma: Best compression ratio (~50-70% size reduction)
-# Note: Slightly slower startup time due to decompression
-RUN upx --best --lzma app && \
-    upx -t app # Verify compressed binary
+# Note: Slightly slower startup time due to decompression.
+# UPX cannot compress arm64 binaries reliably in older versions; skip on arm64.
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        upx --best --lzma app && upx -t app; \
+    else \
+        echo "Skipping UPX for arch=${TARGETARCH}"; \
+    fi
 
 # -----------------------------------------------------------------------------
 # Stage 2: Rootfs Preparation - Create minimal filesystem
 # -----------------------------------------------------------------------------
 FROM alpine:${ALPINE_VERSION} AS rootfs
 
+# Alpine's base image doesn't ship tzdata; install it explicitly so the copy
+# below is deterministic instead of silently no-oping.
+RUN apk add --no-cache ca-certificates tzdata
+
 # Create directory structure
-RUN mkdir -p /rootfs/etc/ssl/certs /rootfs/tmp
+RUN mkdir -p /rootfs/etc/ssl/certs /rootfs/usr/share /rootfs/tmp
 
 # Copy CA Certificates (required for HTTPS calls)
 RUN cp /etc/ssl/certs/ca-certificates.crt /rootfs/etc/ssl/certs/
 
-# Copy timezone data (optional, for time.LoadLocation)
-RUN cp -r /usr/share/zoneinfo /rootfs/usr/share/zoneinfo 2>/dev/null || true
+# Copy timezone data (required if app uses time.LoadLocation)
+RUN cp -r /usr/share/zoneinfo /rootfs/usr/share/zoneinfo
 
 # Create minimal /etc/passwd and /etc/group for non-root user
 # UID 65534 is standard 'nobody' user

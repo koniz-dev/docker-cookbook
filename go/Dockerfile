@@ -8,7 +8,7 @@
 # -----------------------------------------------------------------------------
 # Build Arguments
 # -----------------------------------------------------------------------------
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.21
 
 ARG VERSION=1.0.0
@@ -18,7 +18,13 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Compile Go binary
 # -----------------------------------------------------------------------------
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+# TARGETARCH/TARGETOS are injected by buildx so cross-compilation works.
+ARG TARGETARCH
+ARG TARGETOS
+ARG VERSION
+ARG BUILD_DATE
 
 WORKDIR /build
 
@@ -40,15 +46,12 @@ COPY . .
 # CGO_ENABLED=0: Pure Go, no C dependencies (static binary)
 # -ldflags="-s -w": Strip symbol table and DWARF debug info (~20-30% smaller)
 # -trimpath: Remove file system paths (reproducible builds, security)
-# -installsuffix cgo: Ensure static linking
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" \
-    -trimpath \
-    -installsuffix cgo \
-    -o app ./cmd/main.go || \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o app .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+        -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" \
+        -trimpath \
+        -o app .
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - Minimal production image

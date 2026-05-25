@@ -8,7 +8,7 @@
 # -----------------------------------------------------------------------------
 # Build Arguments
 # -----------------------------------------------------------------------------
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.21
 
 ARG VERSION=1.0.0
@@ -18,7 +18,11 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Compile Go binary
 # -----------------------------------------------------------------------------
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+ARG TARGETARCH
+ARG TARGETOS
+ARG VERSION
 
 WORKDIR /build
 
@@ -31,17 +35,15 @@ COPY . .
 # Build static binary with maximum optimizations
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -X main.Version=${VERSION}" \
-    -trimpath \
-    -installsuffix cgo \
-    -o app ./cmd/main.go || \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o app .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+        -ldflags="-s -w -X main.Version=${VERSION}" \
+        -trimpath \
+        -o app .
 
 # -----------------------------------------------------------------------------
 # Stage 2: Healthcheck Builder - Compile static healthcheck binary
 # -----------------------------------------------------------------------------
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
 
 WORKDIR /build
 
@@ -75,17 +77,25 @@ func main() {
 }
 EOF
 
-# Build static healthcheck binary
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o healthcheck healthcheck.go
+# Build static healthcheck binary (also cross-compiled when buildx is used)
+ARG TARGETARCH
+ARG TARGETOS
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -trimpath -o healthcheck healthcheck.go
+
+# -----------------------------------------------------------------------------
+# Stage 2b: Timezone source (distroless/static doesn't ship tzdata)
+# -----------------------------------------------------------------------------
+FROM alpine:${ALPINE_VERSION} AS tz
+RUN apk add --no-cache tzdata
 
 # -----------------------------------------------------------------------------
 # Stage 3: Final - Distroless Static
 # -----------------------------------------------------------------------------
 # gcr.io/distroless/static-debian12 contains:
 # - CA Certificates (/etc/ssl/certs/ca-certificates.crt)
-# - Timezone data (/usr/share/zoneinfo)
 # - /etc/passwd with nonroot user (UID 65532)
-# - NO shell, NO libc, NO package manager
+# - NO shell, NO libc, NO package manager, NO tzdata (copied below)
 FROM gcr.io/distroless/static-debian12:nonroot
 
 # Re-declare ARGs for labels
@@ -103,6 +113,9 @@ LABEL org.opencontainers.image.title="Go Application (Distroless)" \
       org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"
 
 WORKDIR /app
+
+# Inject timezone data (required if app uses time.LoadLocation with TZ env)
+COPY --from=tz /usr/share/zoneinfo /usr/share/zoneinfo
 
 # Copy application binary
 COPY --from=builder --chown=nonroot:nonroot /build/app ./

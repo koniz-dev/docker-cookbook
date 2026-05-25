@@ -10,6 +10,7 @@
 # -----------------------------------------------------------------------------
 ARG PYTHON_VERSION=3.13
 ARG ALPINE_VERSION=3.21
+ARG UV_VERSION=0.5.11
 
 ARG VERSION=0.1.0
 ARG BUILD_DATE
@@ -20,8 +21,8 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Install uv (modern, fast package manager)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install uv (modern, fast package manager). Pin version for reproducible builds.
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
 
 # Build dependencies for native packages
 RUN apk add --no-cache \
@@ -33,26 +34,23 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml uv.lock ./
 
 # Install dependencies into virtual environment with cache
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project 2>/dev/null || \
-    uv pip install -r requirements.txt --target /app/.venv/lib/python${PYTHON_VERSION}/site-packages 2>/dev/null || \
-    echo "No dependencies to install"
+    uv sync --frozen --no-dev --no-install-project
 
 # Copy source code
 COPY src/ ./src/
 
-# Install project (if pyproject.toml exists)
+# Install project itself
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev 2>/dev/null || true
+    uv sync --frozen --no-dev
 
-# Optimization: Remove unnecessary files
-RUN find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find /app -type f -name '*.pyc' -delete 2>/dev/null || true && \
-    find /app -type d -name tests -exec rm -rf {} + 2>/dev/null || true && \
-    find /app -type d -name '*.dist-info' -exec sh -c 'cd "$1" && find . -type f ! -name "METADATA" -delete' _ {} \; 2>/dev/null || true
+# Optimization: Remove unnecessary files from the venv
+RUN find /app -type d -name __pycache__ -exec rm -rf {} + && \
+    find /app -type f -name '*.pyc' -delete && \
+    find /app -type d -name tests -exec rm -rf {} +
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - Minimal production image
@@ -108,28 +106,25 @@ ENV HOST=0.0.0.0 \
     WORKERS=2 \
     LOG_LEVEL=INFO
 
-# Remove pip, setuptools from runtime (not needed)
+# Remove pip, setuptools from runtime (not needed at runtime)
 RUN rm -rf \
     /usr/local/lib/python*/site-packages/pip* \
     /usr/local/lib/python*/site-packages/setuptools* \
     /usr/local/lib/python*/ensurepip \
-    /usr/local/bin/pip* \
-    2>/dev/null || true
+    /usr/local/bin/pip*
 
-# Set permissions
+# Read+execute for the app tree; writes (if any) should target a mounted tmpfs.
 RUN chmod -R 550 /app
 
 # Switch to non-root user
 USER appuser
 
 # Expose port
-EXPOSE ${PORT}
+EXPOSE 8000
 
-# Healthcheck
+# Healthcheck (single, predictable path — curl is installed above)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD curl -fsS http://localhost:${PORT}/health || \
-        wget --quiet --tries=1 --spider http://localhost:${PORT}/health || \
-        python -c "import http.client; c=http.client.HTTPConnection('localhost', ${PORT}); c.request('GET', '/health'); exit(0 if c.getresponse().status==200 else 1)"
+    CMD curl -fsS "http://localhost:${PORT}/health" || exit 1
 
 # Graceful shutdown
 STOPSIGNAL SIGTERM

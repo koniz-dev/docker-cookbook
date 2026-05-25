@@ -39,6 +39,19 @@ Go binaries can be large (~10-20MB for a simple app).
 | `Dockerfile.distroless` | Distroless Static | ~8-15 MB | High security. CA Certs included. No shell. |
 | `Dockerfile.scratch` | FROM scratch + UPX | ~2-5 MB | **EXTREME**. Minimal attack surface. Maximum performance. |
 
+```mermaid
+flowchart LR
+    SRC[Go source] --> BUILD[golang:1.23-alpine<br/>CGO_ENABLED=0<br/>-ldflags -s -w<br/>-trimpath]
+    BUILD --> BIN[static binary]
+    BIN -->|+ ca-certs, tini, curl| ALP([alpine ~20 MB])
+    BIN -->|+ tzdata only| DL([distroless ~10 MB])
+    BIN -->|+ UPX --best --lzma| UPX[compressed binary]
+    UPX -->|+ minimal rootfs| SCR([scratch ~3 MB])
+
+    classDef out fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    class ALP,DL,SCR out;
+```
+
 ---
 
 ## 2. Base Images

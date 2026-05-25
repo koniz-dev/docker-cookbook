@@ -12,12 +12,11 @@
 - [3. Node Package Managers](#3-node-package-managers)
 - [4. Optimization Techniques](#4-optimization-techniques)
 - [5. Nginx Configuration](#5-nginx-configuration)
-- [6. Static File Compression](#6-static-file-compression)
-- [7. Extreme Optimization: From Scratch](#7-extreme-optimization-from-scratch)
-- [8. Comparison Table](#8-comparison-table)
-- [9. Production Checklist](#9-production-checklist)
-- [10. Docker Compose](#10-docker-compose-for-react)
-- [11. CI/CD](#11-cicd-for-react)
+- [6. Extreme Optimization: From Scratch](#6-extreme-optimization-from-scratch)
+- [7. Comparison Table](#7-comparison-table)
+- [8. Production Checklist](#8-production-checklist)
+- [9. Docker Compose](#9-docker-compose-for-react)
+- [10. CI/CD](#10-cicd-for-react)
 
 ---
 
@@ -39,6 +38,25 @@ Configure Nginx to **always return index.html** if a file is not found.
 location / {
     try_files $uri $uri/ /index.html;
 }
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant N as Nginx
+    participant FS as Filesystem
+    participant R as React Router
+
+    U->>N: GET /dashboard
+    N->>FS: try_files /dashboard
+    FS-->>N: 404 (no such file)
+    N->>FS: try_files /dashboard/
+    FS-->>N: 404 (no such dir)
+    N->>FS: serve /index.html
+    FS-->>N: index.html (200)
+    N-->>U: index.html + JS bundle
+    U->>R: hydrate, read window.location
+    R-->>U: render Dashboard view
 ```
 
 ### HTTP Caching Strategy (Cache Control)
@@ -68,12 +86,25 @@ location = /index.html {
 
 Build tools like Vite automatically add hashes to filenames: `index-2f9a.js`.
 
-**Update Flow:**
-1. Dev changes code → Build.
-2. Vite creates new file: `index-9z8y.js` (hash changed).
-3. Vite updates `index.html` to point to the new file.
-4. Browser loads `index.html` (no-cache) → Sees new JS file → Downloads new JS file.
-5. Old JS file (`index-2f9a.js`) stays in browser cache but is ignored.
+```mermaid
+sequenceDiagram
+    participant D as Developer
+    participant V as Vite build
+    participant B as Browser
+    participant N as Nginx
+
+    D->>V: edit src/App.tsx
+    V->>V: emit index-9z8y.js (new hash)
+    V->>V: rewrite index.html → src="index-9z8y.js"
+    D->>N: deploy /dist
+
+    B->>N: GET /
+    N-->>B: index.html (no-cache, fresh)
+    B->>B: parse, sees new hash
+    B->>N: GET /assets/index-9z8y.js
+    N-->>B: 200 (Cache-Control: immutable)
+    Note over B: old index-2f9a.js stays in<br/>browser cache, never re-fetched
+```
 
 ### Gzip vs Brotli Compression
 
@@ -177,7 +208,7 @@ find dist -type f -name "*.js" | xargs -P 4 -I {} gzip -k {}
 
 ```nginx
 server {
-    listen 80;
+    listen 3000;
     root /usr/share/nginx/html;
     index index.html;
 
@@ -205,9 +236,11 @@ server {
 
 ---
 
-## 7. Extreme Optimization: From Scratch
+## 6. Extreme Optimization: From Scratch
 
-### 7.1 UPX Binary Compression
+See [`Dockerfile.scratch`](./Dockerfile.scratch) for the full implementation.
+
+### 6.1 UPX Binary Compression
 
 [UPX](https://upx.github.io/) compresses the binary, maintaining functionality while reducing size by ~50-70%.
 
@@ -218,7 +251,7 @@ RUN apk add --no-cache upx
 RUN upx --best --lzma /nginx
 ```
 
-### 7.2 Static C Healthcheck Binary
+### 6.2 Static C Healthcheck Binary
 
 Healthcheck binary written in C, no curl/wget needed.
 
@@ -233,11 +266,7 @@ RUN strip /healthcheck
 # Result: ~20KB binary
 ```
 
-### 7.3 BusyBox httpd (Ultra-minimal)
-
-[lipanski/docker-static-website](https://github.com/lipanski/docker-static-website) only ~100KB base image.
-
-### 7.4 Custom Nginx (Static Build + Scratch)
+### 6.3 Custom Nginx (Static Build + Scratch)
 
 Compile Nginx as a static binary and run on `scratch`.
 
@@ -245,18 +274,16 @@ Result: **~5MB Docker Image running Nginx!**
 
 ---
 
-## 8. Comparison Table
+## 7. Comparison Table
 
 | Method | Image Size | Build Complexity | Performance | Use Case |
 |--------|------------|------------------|-------------|----------|
 | nginx:alpine | 25-30MB | Low | Excellent | Production standard |
 | Custom nginx (scratch) | 5-8MB | High | Excellent | Size-critical |
-| BusyBox httpd | 1-2MB | Low | Basic | Ultra-minimal |
-| Go embed (scratch) | 3-5MB | Medium | Excellent | Single binary deploy |
 
 ---
 
-## 9. Production Checklist
+## 8. Production Checklist
 
 ### ✅ Build Optimization
 
@@ -282,12 +309,11 @@ Result: **~5MB Docker Image running Nginx!**
 
 ---
 
-## 10. Docker Compose for React
+## 9. Docker Compose for React
 
 ### Development Setup
 
 ```yaml
-version: '3.8'
 services:
   frontend:
     command: pnpm dev --host
@@ -297,7 +323,7 @@ services:
 
 ---
 
-## 11. CI/CD for React
+## 10. CI/CD for React
 
 ### GitHub Actions + Lighthouse
 

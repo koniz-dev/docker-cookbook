@@ -8,6 +8,7 @@
 ARG NODE_VERSION=22
 ARG ALPINE_VERSION=3.21
 ARG NGINX_VERSION=1.27.3
+ARG PNPM_VERSION=9.15.0
 
 ARG VERSION=1.0.0
 ARG BUILD_DATE
@@ -16,14 +17,16 @@ ARG VCS_REF
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Build React app
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine AS builder
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+ARG PNPM_VERSION
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-# Install compression tools
-RUN apk add --no-cache gzip brotli
+# gzip only — the static nginx in stage 2 is built without ngx_brotli
+RUN apk add --no-cache gzip
 
 WORKDIR /app
 
@@ -44,7 +47,7 @@ RUN pnpm build && \
     find dist -type f -name "*.map" -delete && \
     find dist -type f -name "*.LICENSE.*" -delete && \
     rm -f dist/stats.html && \
-    # Pre-compress with both gzip and brotli
+    # Pre-compress with gzip (served by gzip_static)
     find dist -type f \( \
         -name "*.html" -o \
         -name "*.css" -o \
@@ -52,7 +55,7 @@ RUN pnpm build && \
         -name "*.json" -o \
         -name "*.svg" -o \
         -name "*.xml" \
-    \) -print0 | xargs -0 -P$(nproc) -I {} sh -c 'gzip -9 -k "{}" && brotli -q 11 "{}"'
+    \) -print0 | xargs -0 -P"$(nproc)" -I {} gzip -9 -k "{}"
 
 # -----------------------------------------------------------------------------
 # Stage 2: Nginx Builder - Build static nginx binary
