@@ -8,7 +8,7 @@
 
 | File | Description | Measured Size | Use Case |
 |------|-------------|---------------|----------|
-| `Dockerfile` | SDK build + `aspnet:9.0-noble-chiseled` | **170 MB** | Default for ASP.NET Core 9 services |
+| `Dockerfile` | SDK build + `aspnet:9.0-noble-chiseled` + static Go healthcheck | **177 MB** | Default for ASP.NET Core 9 services |
 
 ```mermaid
 flowchart LR

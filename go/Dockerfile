@@ -74,16 +74,16 @@ LABEL org.opencontainers.image.title="Go Application" \
 
 WORKDIR /app
 
-# Install minimal runtime dependencies
+# Install minimal runtime dependencies.
 # ca-certificates: Required for HTTPS calls (TLS verification)
-# tzdata: Required for time.LoadLocation() (timezone support)
-# tini: Proper init system for signal handling (PID 1 problem)
-# curl: For healthcheck (optional, can remove if using TCP check)
+# tzdata:          Required for time.LoadLocation() (timezone support)
+# wget:            Pulled in by busybox already; used by HEALTHCHECK below.
+#                  No tini — a static Go binary handles SIGTERM natively and
+#                  doesn't fork zombies, so PID 1 is fine.
+#                  No curl — wget covers the healthcheck and is ~1 MB lighter.
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata \
-    tini \
-    curl && \
+    tzdata && \
     rm -rf /var/cache/apk/* /tmp/*
 
 # Create non-root user with explicit UID/GID
@@ -110,16 +110,12 @@ USER appuser
 # Expose port (documentation only)
 EXPOSE 8080
 
-# Healthcheck
-# Using curl for HTTP check. For TCP-only check, use nc or custom binary.
+# Healthcheck via busybox wget (already present in alpine base).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -fsS http://localhost:8080/health || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Graceful shutdown signal
 STOPSIGNAL SIGTERM
 
-# Use tini as init system (handles SIGTERM, reaps zombies)
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Run application
-CMD ["./app"]
+# Exec form — the Go binary is PID 1 and receives SIGTERM directly.
+ENTRYPOINT ["./app"]

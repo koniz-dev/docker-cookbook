@@ -37,7 +37,7 @@ Sizes below are measured against the bundled sample app (a stdlib HTTP server wi
 
 | File | Description | Measured Size | Use Case |
 |------|-------------|---------------|----------|
-| `Dockerfile` | Alpine Runtime | **37.7 MB** | Development, debugging. Shell available. |
+| `Dockerfile` | Alpine Runtime (no tini, wget healthcheck) | **30.4 MB** | Development, debugging. Shell available. |
 | `Dockerfile.distroless` | Distroless Static + tzdata | **22.6 MB** | High security. CA Certs included. No shell. |
 | `Dockerfile.scratch` | FROM scratch + UPX | **5.5 MB** | **EXTREME**. Minimal attack surface. Maximum performance. |
 

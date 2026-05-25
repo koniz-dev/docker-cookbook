@@ -78,14 +78,25 @@ RUN jlink \
     --output /custom-jre
 
 # -----------------------------------------------------------------------------
-# Stage 3: Layer Extractor - Separate Spring Boot layers
+# Stage 3: Tools-mode extract + AppCDS training run
 # -----------------------------------------------------------------------------
+# Spring Boot 3.3+ tools-mode extraction produces a thin `app.jar` + `lib/`
+# alongside, which is the canonical layout for AppCDS. The training run uses
+# `spring.context.exit=onRefresh` to load every class and exit, dumping the
+# CDS archive to /extracted/app.jsa.
 FROM ${BUILD_IMAGE} AS layer-extractor
 
-WORKDIR /app
+WORKDIR /work
 COPY --from=builder /app/app.jar ./
 
-RUN java -Djarmode=layertools -jar app.jar extract --destination /extracted
+# Extracts /extracted/app.jar (thin launcher) + /extracted/lib/*.jar
+RUN java -Djarmode=tools -jar app.jar extract --destination /extracted
+
+# AppCDS training — writes /extracted/app.jsa
+RUN cd /extracted && \
+    java -XX:ArchiveClassesAtExit=app.jsa \
+         -Dspring.context.exit=onRefresh \
+         -jar app.jar
 
 # -----------------------------------------------------------------------------
 # Stage 4: Runtime - Minimal production image
@@ -126,14 +137,15 @@ COPY --from=jre-builder /custom-jre $JAVA_HOME
 # Set up application directory
 WORKDIR /app
 
-# Copy Spring Boot layers (in optimal caching order)
-COPY --from=layer-extractor --chown=appuser:appgroup /extracted/dependencies/ ./
-COPY --from=layer-extractor --chown=appuser:appgroup /extracted/spring-boot-loader/ ./
-COPY --from=layer-extractor --chown=appuser:appgroup /extracted/snapshot-dependencies/ ./
-COPY --from=layer-extractor --chown=appuser:appgroup /extracted/application/ ./
+# Cache-friendly COPY order — `lib/` is the big, slow-changing layer; `app.jar`
+# and the CDS archive change with every code edit but are small.
+COPY --from=layer-extractor --chown=appuser:appgroup /extracted/lib ./lib
+COPY --from=layer-extractor --chown=appuser:appgroup /extracted/app.jar ./
+COPY --from=layer-extractor --chown=appuser:appgroup /extracted/app.jsa ./
 
-# JVM Configuration for Container
-# Use JDK_JAVA_OPTIONS so `java` picks up tuning flags even with exec form CMD.
+# JVM Configuration for Container.
+# JDK_JAVA_OPTIONS applies to every `java` invocation. SharedArchiveFile is
+# what makes the AppCDS archive built above actually get used at startup.
 ENV JDK_JAVA_OPTIONS="\
     -XX:+UseContainerSupport \
     -XX:MaxRAMPercentage=75.0 \
@@ -144,6 +156,7 @@ ENV JDK_JAVA_OPTIONS="\
     -XX:+ParallelRefProcEnabled \
     -XX:+DisableExplicitGC \
     -XX:+ExitOnOutOfMemoryError \
+    -XX:SharedArchiveFile=/app/app.jsa \
     -Djava.security.egd=file:/dev/./urandom \
     -Djava.awt.headless=true \
     -Dfile.encoding=UTF-8"
@@ -162,7 +175,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 STOPSIGNAL SIGTERM
 
 # Use tini as init system; exec form so signals reach the JVM directly.
+# Run the extracted thin launcher (`java -jar app.jar`) — required by AppCDS.
 ENTRYPOINT ["/sbin/tini", "--", "java"]
-
-# Run Spring Boot with JarLauncher (optimized for layered JAR)
-CMD ["org.springframework.boot.loader.launch.JarLauncher"]
+CMD ["-jar", "/app/app.jar"]

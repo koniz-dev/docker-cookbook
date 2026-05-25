@@ -6,18 +6,16 @@
 
 ## 1. Overview
 
-| File | Description | Measured Size | Use Case |
-|------|-------------|---------------|----------|
-| `Dockerfile` | Alpine + bun runtime + bundled JS | **170 MB** | Standard server with HMR-like iteration speed |
-| `Dockerfile.distroless` | `bun build --compile` → standalone binary on distroless/cc | **173 MB** | Compiled deploy, no Bun image needed |
+| File | Description | Measured Size | Cold start | Use Case |
+|------|-------------|---------------|------------|----------|
+| `Dockerfile` | Alpine + bun runtime + bundled JS | **170 MB** | ~0.5 s | Default — server with non-root + tini |
+
+> **Why no scratch/distroless variant?** Bun's compiled binary (`bun build --compile`) embeds the entire runtime — ~100 MB by itself. Stacking it on `distroless/cc` ends up **larger** than just shipping the alpine image with the runtime + your tiny JS bundle. The compile-mode trade-off is "single deploy unit", not "smaller image". See section 4.
 
 ```mermaid
 flowchart LR
-    SRC[TS source] --> A{Deploy mode?}
-    A -- "ship the runtime" --> B[bun build<br/>→ dist/main.js]
-    A -- "self-contained" --> C[bun build --compile<br/>→ glibc-linked binary]
-    B --> D([oven/bun:alpine])
-    C --> E([distroless/cc + binary])
+    SRC[TS source] --> B[bun build --minify<br/>→ dist/main.js]
+    B --> D([oven/bun:alpine<br/>+ your bundled JS])
 ```
 
 ---
@@ -49,18 +47,11 @@ Tips:
 
 ---
 
-## 4. Compile mode (`--compile`)
+## 4. About `bun build --compile`
 
-`bun build --compile` produces a single executable around 50-90 MB that contains:
-
-- The Bun runtime (V8 fork)
-- All your JS/TS bundled and minified
-- Native module shims
-
-The resulting binary still **dynamically links** to glibc and a few base libs, so it cannot run on truly empty `FROM scratch`. Use `gcr.io/distroless/cc-debian12:nonroot` instead — same security posture as scratch, but with the libraries Bun needs:
+`bun build --compile` produces a single executable that embeds the Bun runtime + your JS. It's tempting as a "minimal" deploy:
 
 ```dockerfile
-# Build on glibc base so the binary matches the runtime
 FROM oven/bun:1.1.43-slim AS builder
 RUN bun build src/main.ts --compile --outfile=app
 
@@ -69,10 +60,13 @@ COPY --from=builder /app/app /app
 ENTRYPOINT ["/app"]
 ```
 
-Tradeoffs:
-- **Bigger than a bundled JS file** (the runtime is included).
-- **Smaller than ship-the-runtime images** (no Bun toolchain).
-- **Faster cold start** than `bun src/main.ts` because parsing is skipped.
+But the binary itself is ~100 MB (the entire Bun runtime), and the resulting image came out **larger** than the alpine variant in our measurements (173 MB vs 170 MB). The actual benefits of `--compile` are:
+
+- **Single binary deploy** (no `node_modules`, no `bun install` at deploy time)
+- **Slightly faster cold start** (no parsing)
+- **No package manager in production image** (smaller attack surface than alpine + bun)
+
+So pick it for *operational* reasons, not for *image size*. If size is the goal, the alpine variant is currently the smaller of the two.
 
 ---
 

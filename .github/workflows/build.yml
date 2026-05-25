@@ -16,40 +16,82 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: go,                  context: ./go,     file: ./go/Dockerfile }
-          - { name: go-distroless,       context: ./go,     file: ./go/Dockerfile.distroless }
-          - { name: go-scratch,          context: ./go,     file: ./go/Dockerfile.scratch }
-          - { name: python,              context: ./python, file: ./python/Dockerfile }
-          - { name: python-distroless,   context: ./python, file: ./python/Dockerfile.distroless }
-          - { name: node,                context: ./node,   file: ./node/Dockerfile }
-          - { name: node-distroless,     context: ./node,   file: ./node/Dockerfile.distroless }
-          - { name: java,                context: ./java,   file: ./java/Dockerfile }
-          - { name: java-distroless,     context: ./java,   file: ./java/Dockerfile.distroless }
-          - { name: react,               context: ./react,  file: ./react/Dockerfile }
-          - { name: react-scratch,       context: ./react,  file: ./react/Dockerfile.scratch }
-          - { name: rust,                context: ./rust,   file: ./rust/Dockerfile }
-          - { name: rust-distroless,     context: ./rust,   file: ./rust/Dockerfile.distroless }
-          - { name: bun,                 context: ./bun,    file: ./bun/Dockerfile }
-          - { name: bun-distroless,      context: ./bun,    file: ./bun/Dockerfile.distroless }
-          - { name: dotnet,              context: ./dotnet, file: ./dotnet/Dockerfile }
+          - { name: go,                  context: ./go,     file: ./go/Dockerfile,                port: 8080, health: /health }
+          - { name: go-distroless,       context: ./go,     file: ./go/Dockerfile.distroless,     port: 8080, health: /health }
+          - { name: go-scratch,          context: ./go,     file: ./go/Dockerfile.scratch,        port: 8080, health: /health }
+          - { name: python,              context: ./python, file: ./python/Dockerfile,            port: 8000, health: /health }
+          - { name: python-distroless,   context: ./python, file: ./python/Dockerfile.distroless, port: 8000, health: /health }
+          - { name: node,                context: ./node,   file: ./node/Dockerfile,              port: 3000, health: /health }
+          - { name: node-distroless,     context: ./node,   file: ./node/Dockerfile.distroless,   port: 3000, health: /health }
+          - { name: java,                context: ./java,   file: ./java/Dockerfile,              port: 8080, health: /actuator/health }
+          - { name: java-distroless,     context: ./java,   file: ./java/Dockerfile.distroless,   port: 8080, health: /actuator/health }
+          - { name: react,               context: ./react,  file: ./react/Dockerfile,             port: 3000, health: /health }
+          - { name: react-scratch,       context: ./react,  file: ./react/Dockerfile.scratch,     port: 3000, health: /health }
+          - { name: rust,                context: ./rust,   file: ./rust/Dockerfile,              port: 8080, health: /health }
+          - { name: rust-distroless,     context: ./rust,   file: ./rust/Dockerfile.distroless,   port: 8080, health: /health }
+          - { name: bun,                 context: ./bun,    file: ./bun/Dockerfile,               port: 3000, health: /health }
+          - { name: dotnet,              context: ./dotnet, file: ./dotnet/Dockerfile,            port: 8080, health: /health }
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Build (load locally, do not push)
+
+      - name: Set up QEMU (cross-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 1: multi-arch build — proves the Dockerfile actually cross-compiles.
+      # No `load:` here because buildx can't load multi-platform manifests locally.
+      - name: Build (linux/amd64 + linux/arm64, verify cross-compile)
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      # Step 2: amd64-only build with load=true so we can scan + smoke-test.
+      # Reuses the cache from step 1, so it's nearly free.
+      - name: Build (linux/amd64, load for scan/smoke)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
           push: false
           load: true
           tags: cookbook-${{ matrix.name }}:ci
           cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,scope=${{ matrix.name }},mode=max
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.36.0
+
+      - name: Smoke test (docker run + curl /health)
+        run: |
+          set -euo pipefail
+          HOST_PORT=$(( RANDOM % 10000 + 40000 ))
+          CID=$(docker run -d --rm \
+            -p "$HOST_PORT:${{ matrix.port }}" \
+            "cookbook-${{ matrix.name }}:ci")
+          # Give the container up to 90s to come up (JVM-heavy stacks need it)
+          for i in $(seq 1 90); do
+            if curl -fsS "http://localhost:$HOST_PORT${{ matrix.health }}" >/dev/null 2>&1; then
+              echo "✓ ${{ matrix.name }} healthy in ${i}s"
+              docker stop "$CID" >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "✗ ${{ matrix.name }} did NOT become healthy in 90s"
+          docker logs "$CID"
+          docker stop "$CID" >/dev/null
+          exit 1
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: cookbook-${{ matrix.name }}:ci
           format: table
           severity: CRITICAL,HIGH
-          exit-code: 0
+          # Fail the build on unfixed-or-not HIGH/CRITICAL — cookbook §13 says so.
+          exit-code: 1
           ignore-unfixed: true

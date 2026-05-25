@@ -22,7 +22,6 @@ VARIANTS := \
   rust:rust/Dockerfile \
   rust-distroless:rust/Dockerfile.distroless \
   bun:bun/Dockerfile \
-  bun-distroless:bun/Dockerfile.distroless \
   dotnet:dotnet/Dockerfile
 
 .PHONY: build sizes sizes.md clean

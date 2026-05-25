@@ -30,7 +30,6 @@ jobs:
           - rust/Dockerfile
           - rust/Dockerfile.distroless
           - bun/Dockerfile
-          - bun/Dockerfile.distroless
           - dotnet/Dockerfile
     steps:
       - uses: actions/checkout@v4

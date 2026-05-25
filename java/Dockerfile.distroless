@@ -68,13 +68,19 @@ RUN jlink \
     --output /custom-jre
 
 # -----------------------------------------------------------------------------
-# Stage 3: Layer Extractor
+# Stage 3: Tools-mode extract + AppCDS training run
 # -----------------------------------------------------------------------------
 FROM ${BUILD_IMAGE} AS layer-extractor
 
-WORKDIR /app
+WORKDIR /work
 COPY --from=builder /app/app.jar ./
-RUN java -Djarmode=layertools -jar app.jar extract --destination /extracted
+RUN java -Djarmode=tools -jar app.jar extract --destination /extracted
+
+# AppCDS training run — produces /extracted/app.jsa
+RUN cd /extracted && \
+    java -XX:ArchiveClassesAtExit=app.jsa \
+         -Dspring.context.exit=onRefresh \
+         -jar app.jar
 
 # -----------------------------------------------------------------------------
 # Stage 4: Healthcheck Builder - Pure Java healthcheck (no curl needed)
@@ -140,11 +146,11 @@ COPY --from=jre-builder /custom-jre $JAVA_HOME
 
 WORKDIR /app
 
-# Copy Spring Boot layers
-COPY --from=layer-extractor /extracted/dependencies/ ./
-COPY --from=layer-extractor /extracted/spring-boot-loader/ ./
-COPY --from=layer-extractor /extracted/snapshot-dependencies/ ./
-COPY --from=layer-extractor /extracted/application/ ./
+# Cache-friendly: lib/ is the slow-changing big layer; app.jar + app.jsa flip
+# with every code change but are small.
+COPY --from=layer-extractor /extracted/lib ./lib
+COPY --from=layer-extractor /extracted/app.jar ./
+COPY --from=layer-extractor /extracted/app.jsa ./
 
 # Copy healthcheck class
 COPY --from=healthcheck-builder /app/HealthCheck.class ./
@@ -160,6 +166,7 @@ ENV JDK_JAVA_OPTIONS="\
     -XX:MaxGCPauseMillis=100 \
     -XX:+UseStringDeduplication \
     -XX:+ExitOnOutOfMemoryError \
+    -XX:SharedArchiveFile=/app/app.jsa \
     -Djava.security.egd=file:/dev/./urandom \
     -Djava.awt.headless=true"
 
@@ -174,6 +181,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 STOPSIGNAL SIGTERM
 
-# Run with exec form (distroless has no shell). JDK_JAVA_OPTIONS above applies automatically.
+# Exec form (no shell in distroless). The thin app.jar produced by tools-mode
+# extract is the AppCDS-compatible entrypoint.
 ENTRYPOINT ["java"]
-CMD ["org.springframework.boot.loader.launch.JarLauncher"]
+CMD ["-jar", "/app/app.jar"]

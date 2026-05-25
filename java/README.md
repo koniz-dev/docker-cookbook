@@ -428,12 +428,12 @@ HEALTHCHECK CMD ["java", "HealthCheck"]
 
 This directory contains variants:
 
-| File | Description | Measured Size | Use Case |
-|------|-------------|---------------|----------|
-| `Dockerfile` | Custom JRE (jlink) + Alpine | **171 MB** | Default choice |
-| `Dockerfile.distroless` | Custom JRE + Distroless base-debian12 | **181 MB** | Security-critical |
+| File | Description | Measured Size | Cold start | Use Case |
+|------|-------------|---------------|------------|----------|
+| `Dockerfile` | Custom JRE + Alpine + AppCDS | **216 MB** | ~3.8 s | Default choice |
+| `Dockerfile.distroless` | Custom JRE + Distroless + AppCDS | **227 MB** | ~3.2 s | Security-critical |
 
-> Distroless is slightly *larger* here than Alpine because `distroless/base-debian12` carries glibc + a few base libs; you save ~50 MB of OS userland vs full Debian but Alpine has even less.
+> **The +45 MB vs the pre-CDS layout is the AppCDS archive** (`/app/app.jsa`) baked at build time. In return you get ~20% faster startup (cookbook §0 shows CDS reduces startup 10-30%). If you'd rather have the smaller image, drop the CDS training run + the `.jsa` COPY + the `-XX:SharedArchiveFile` flag.
 
 ---
 

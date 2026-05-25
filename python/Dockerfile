@@ -50,10 +50,12 @@ COPY src/ ./src/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Optimization: Remove unnecessary files from the venv
-RUN find /app -type d -name __pycache__ -exec rm -rf {} + && \
+# Strip noise from the venv, then pre-compile to .pyc. Pre-compiling cuts ~10-20%
+# off cold start because the import path no longer pays parse cost.
+RUN find /app -type d -name tests -exec rm -rf {} + && \
+    find /app -type d -name __pycache__ -exec rm -rf {} + && \
     find /app -type f -name '*.pyc' -delete && \
-    find /app -type d -name tests -exec rm -rf {} +
+    /app/.venv/bin/python -O -m compileall -q -j 0 /app/.venv /app/src
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - Minimal production image
@@ -81,9 +83,10 @@ RUN apk add --no-cache \
     tzdata && \
     rm -rf /var/cache/apk/*
 
-# Python environment settings
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
+# Python environment settings.
+# We DELIBERATELY do not set PYTHONDONTWRITEBYTECODE=1 — we pre-compiled .pyc
+# in the builder stage and want Python to use them instead of re-parsing.
+ENV PYTHONUNBUFFERED=1 \
     PYTHONFAULTHANDLER=1 \
     PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=1 \

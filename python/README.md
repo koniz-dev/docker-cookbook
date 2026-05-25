@@ -124,11 +124,13 @@ Python applications have unique characteristics:
 
 ## 2. Base Images for Python
 
-| Image | Bundled sample size | Pros | Cons | Recommendation |
-|-------|----|------|------|----------------|
-| `python:3.13-alpine` (this Dockerfile) | **107 MB** | Smallest base, multi-stage clean | Build issues for native deps (musl) | Default for pure Python |
-| `gcr.io/distroless/base + custom Python` (Dockerfile.distroless) | **107 MB** | Secure, no shell, multi-arch | Hard to debug, custom lib copying | Production Security |
-| `python:3.13-slim` | ~120MB | Compatible (glibc), standard | Slightly larger | Alternative if many native deps |
+| Image | Bundled sample size | Cold start | Pros | Cons | Recommendation |
+|-------|----|----|------|------|----------------|
+| `python:3.13-alpine` (this Dockerfile) | **122 MB** | ~4.5 s | Smallest base, .pyc pre-compiled | musl libc | Default for pure Python |
+| `gcr.io/distroless/base + custom Python` (Dockerfile.distroless) | **114 MB** | ~2.6 s | Secure, no shell, .pyc + `PYTHONOPTIMIZE=2` | Hard to debug | Production Security |
+| `python:3.13-slim` | ~120MB | n/a | Compatible (glibc), standard | Slightly larger | Alternative if many native deps |
+
+> The distroless variant is **faster** here because it bakes `.pyc` files at `PYTHONOPTIMIZE=2` (asserts + docstrings stripped) during build. The Alpine variant only does `PYTHONOPTIMIZE=0` precompilation — bigger files but faster runtime than parsing on every cold start.
 
 ---
 
