@@ -6,8 +6,8 @@
 # Final image size: ~2-5MB (depending on your app)
 # =============================================================================
 
-ARG GO_VERSION=1.23
-ARG ALPINE_VERSION=3.21
+ARG GO_VERSION=1.26
+ARG ALPINE_VERSION=3.22
 
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Compile Go binary

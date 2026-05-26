@@ -91,7 +91,7 @@ RUN find .venv -type f \( -name '*.so*' -o -name '*.a' \) \
 # -----------------------------------------------------------------------------
 # Stage 4: Healthcheck builder - tiny static Go binary (no shell in distroless)
 # -----------------------------------------------------------------------------
-FROM golang:1.23-alpine AS healthcheck-builder
+FROM golang:1.26-alpine AS healthcheck-builder
 
 WORKDIR /build
 RUN go mod init healthcheck
@@ -121,6 +121,7 @@ func main() {
 	os.Exit(1)
 }
 EOF
+
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o /healthcheck healthcheck.go
 
 # -----------------------------------------------------------------------------

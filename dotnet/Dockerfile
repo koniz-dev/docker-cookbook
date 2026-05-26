@@ -31,7 +31,7 @@ RUN dotnet publish sample.csproj \
 # -----------------------------------------------------------------------------
 # Stage 2: Healthcheck binary — chiseled has no shell, curl or wget.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS healthcheck-builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS healthcheck-builder
 
 WORKDIR /build
 ARG TARGETARCH
@@ -62,6 +62,7 @@ func main() {
 	os.Exit(1)
 }
 EOF
+
 RUN go mod init healthcheck && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         go build -ldflags="-s -w" -trimpath -o /healthcheck healthcheck.go

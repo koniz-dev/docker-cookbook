@@ -852,7 +852,10 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@master
+        # Pin third-party actions to a commit SHA — `@master` / `@vX` tags can be
+        # silently repointed (cf. the trivy-action and kics-github-action supply-chain
+        # compromises). Dependabot updates the trailing `# vX.Y.Z` comment for you.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: 'sarif'
