@@ -68,9 +68,11 @@ RUN jdeps --ignore-missing-deps -q \
     --class-path 'BOOT-INF/lib/*' \
     app.jar > deps.info
 
-# Create custom JRE with jlink
+# Create custom JRE with jlink.
+# Quote $(cat ...) — `jdeps --print-module-deps` outputs a single comma-separated
+# token, but unquoted command substitution still trips hadolint SC2046.
 RUN jlink \
-    --add-modules $(cat deps.info) \
+    --add-modules "$(cat deps.info)" \
     --strip-debug \
     --no-man-pages \
     --no-header-files \
@@ -93,8 +95,8 @@ COPY --from=builder /app/app.jar ./
 RUN java -Djarmode=tools -jar app.jar extract --destination /extracted
 
 # AppCDS training — writes /extracted/app.jsa
-RUN cd /extracted && \
-    java -XX:ArchiveClassesAtExit=app.jsa \
+WORKDIR /extracted
+RUN java -XX:ArchiveClassesAtExit=app.jsa \
          -Dspring.context.exit=onRefresh \
          -jar app.jar
 

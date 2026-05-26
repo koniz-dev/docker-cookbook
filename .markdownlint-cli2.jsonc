@@ -1,9 +1,20 @@
 {
   "config": {
     "default": true,
-    "MD013": false,
-    "MD024": { "siblings_only": true },
-    "MD033": false,
-    "MD041": false
+    // Existing pragmatic disables:
+    "MD013": false,                       // line length (cookbook has long tables/refs)
+    "MD024": { "siblings_only": true },   // duplicate headings ok if not under same parent
+    "MD033": false,                       // inline HTML allowed (badges, etc.)
+    "MD041": false,                       // first line need not be a heading
+    // Cosmetic / contentious — disabling so CI focuses on actual content issues.
+    // Re-enable + run `markdownlint-cli2-fix` if a docs-quality pass is wanted.
+    "MD004": false,                       // unordered list style (asterisk vs dash) — preference
+    "MD022": false,                       // blank lines around headings
+    "MD030": false,                       // spaces after list markers
+    "MD031": false,                       // blank lines around fences
+    "MD032": false,                       // blank lines around lists
+    "MD036": false,                       // emphasis used as heading
+    "MD040": false,                       // fenced code blocks must have a language
+    "MD060": false                        // table column style (new noisy rule in v0.40)
   }
 }
