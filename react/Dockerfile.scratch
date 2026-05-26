@@ -71,10 +71,14 @@ ARG BUILDPLATFORM
 # Log build info
 RUN echo "Building on $BUILDPLATFORM for $TARGETPLATFORM"
 
-# Install build dependencies
+# Install build dependencies.
+# Alpine 3.22 splits static libs into separate `-static` packages, so include
+# pcre2-static / openssl-libs-static / zlib-static explicitly — nginx's configure
+# tests link with `-static` (from --with-cc-opt below) and would otherwise fail
+# to find libpcre2-8.a even with pcre2-dev installed.
 RUN apk add --no-cache \
     gcc g++ musl-dev make linux-headers curl \
-    pcre-dev pcre2-dev zlib-dev zlib-static \
+    pcre2-dev pcre2-static zlib-dev zlib-static \
     openssl-dev openssl-libs-static upx
 
 # Download nginx

@@ -12,6 +12,14 @@ java {
     }
 }
 
+// Pin tomcat-embed-core ahead of Spring Boot's bundled version.
+// Spring Boot 3.5.14 ships tomcat 10.1.54, which still carries CVE-2026-41293
+// (CRITICAL) + several HIGHs — all fixed in tomcat 10.1.55. The Spring
+// dependency-management plugin reads this ext property and propagates it to
+// every tomcat-embed-* coordinate, so the override stays consistent.
+// Remove once Spring Boot ships a release that bundles tomcat ≥10.1.55.
+ext['tomcat.version'] = '10.1.55'
+
 repositories {
     mavenCentral()
 }
