@@ -9,7 +9,7 @@
 # Build Arguments
 # -----------------------------------------------------------------------------
 ARG PYTHON_VERSION=3.13
-ARG ALPINE_VERSION=3.21
+ARG ALPINE_VERSION=3.22
 ARG UV_VERSION=0.5.11
 
 ARG VERSION=0.1.0

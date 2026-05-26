@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Docker cookbook Python sample"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi==0.115.6",
+    "fastapi==0.136.3",
     "uvicorn==0.34.0",
 ]
 

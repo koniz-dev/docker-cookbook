@@ -6,7 +6,7 @@
 # =============================================================================
 
 ARG NODE_VERSION=22
-ARG ALPINE_VERSION=3.21
+ARG ALPINE_VERSION=3.22
 ARG PNPM_VERSION=9.15.0
 
 ARG VERSION=1.0.0
@@ -84,8 +84,18 @@ LABEL org.opencontainers.image.title="Node.js API" \
 
 WORKDIR /app
 
-# Install tini for proper signal handling (PID 1 problem)
-RUN apk add --no-cache tini
+# Install tini for proper signal handling (PID 1 problem), then strip the
+# package-manager tooling bundled with the node:alpine base. The runtime only
+# needs `node dist/main.js`, and these tools (npm, yarn, corepack and their
+# transitive deps) carry the bulk of CVEs that trivy flags against this image.
+RUN apk add --no-cache tini && \
+    rm -rf /usr/local/lib/node_modules \
+           /opt/yarn-v* \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/yarn \
+           /usr/local/bin/yarnpkg \
+           /usr/local/bin/corepack
 
 # Set production environment
 ENV NODE_ENV=production \

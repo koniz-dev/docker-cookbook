@@ -47,22 +47,17 @@ FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS lib-collector
 ARG PYTHON_VERSION
 ARG TARGETARCH
 
-# Copy shared libraries by architecture
-# TARGETARCH is a built-in arg of docker buildx (amd64 or arm64)
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        LIBARCH="x86_64"; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-        LIBARCH="aarch64"; \
-    else \
-        LIBARCH="x86_64"; \
-    fi && \
+# Copy shared libraries for the runtime architecture.
+# `uname -m` is more robust than ARG TARGETARCH: under QEMU emulation it returns
+# the *emulated* arch (x86_64 / aarch64) — which exactly matches the multiarch
+# triplet directory names — and doesn't rely on ARG being injected into the RUN
+# shell (which has been flaky for built-in args across buildx versions).
+RUN ARCH=$(uname -m) && \
     mkdir -p /lib/multi-arch && \
-    # Core libraries needed for Python
-    cp /lib/${LIBARCH}-linux-gnu/libc.so.6 /lib/multi-arch/ && \
-    cp /lib/${LIBARCH}-linux-gnu/libm.so.6 /lib/multi-arch/ && \
-    cp /lib/${LIBARCH}-linux-gnu/libz.so.1 /lib/multi-arch/ && \
-    cp /lib/${LIBARCH}-linux-gnu/libgcc_s.so.1 /lib/multi-arch/ && \
-    # Python shared library (required — fail the build if missing)
+    cp /lib/${ARCH}-linux-gnu/libc.so.6 /lib/multi-arch/ && \
+    cp /lib/${ARCH}-linux-gnu/libm.so.6 /lib/multi-arch/ && \
+    cp /lib/${ARCH}-linux-gnu/libz.so.1 /lib/multi-arch/ && \
+    cp /lib/${ARCH}-linux-gnu/libgcc_s.so.1 /lib/multi-arch/ && \
     cp /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /lib/multi-arch/
 
 # -----------------------------------------------------------------------------

@@ -9,7 +9,7 @@
 # Build Arguments
 # -----------------------------------------------------------------------------
 ARG NODE_VERSION=22
-ARG ALPINE_VERSION=3.21
+ARG ALPINE_VERSION=3.22
 ARG NGINX_VERSION=1.27
 ARG PNPM_VERSION=9.15.0
 

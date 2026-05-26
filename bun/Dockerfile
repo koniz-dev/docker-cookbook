@@ -6,7 +6,7 @@
 # =============================================================================
 
 ARG BUN_VERSION=1.1.43
-ARG ALPINE_VERSION=3.21
+ARG ALPINE_VERSION=3.22
 
 ARG VERSION=1.0.0
 ARG BUILD_DATE
