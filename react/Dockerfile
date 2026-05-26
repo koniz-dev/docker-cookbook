@@ -10,7 +10,7 @@
 # -----------------------------------------------------------------------------
 ARG NODE_VERSION=22
 ARG ALPINE_VERSION=3.22
-ARG NGINX_VERSION=1.27
+ARG NGINX_VERSION=1.30
 ARG PNPM_VERSION=9.15.0
 
 ARG VERSION=1.0.0

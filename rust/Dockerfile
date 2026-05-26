@@ -31,15 +31,22 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 ARG TARGETARCH
 
+# Cache mount notes:
+# - cargo registry is identical across architectures (source crates), so it's
+#   shared via a single id — but `sharing=locked` serialises concurrent buildx
+#   platform builds (otherwise two cargos race on extracting the same crate and
+#   collide on `.cargo-ok` markers).
+# - `target/` holds arch-specific compiled artifacts; isolate per TARGETARCH so
+#   amd64 and arm64 builds never overwrite each other's incremental output.
 COPY --from=planner /build/recipe.json recipe.json
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=cargo-target-${TARGETARCH} \
     cargo chef cook --release --recipe-path recipe.json
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=cargo-target-${TARGETARCH} \
     cargo build --release && \
     cp target/release/app /app
 

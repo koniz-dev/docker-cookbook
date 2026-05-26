@@ -1,0 +1,18 @@
+# Trivy ignore list — keep this short, time-bound, and well-explained.
+# trivy-action picks up this file from the repo root automatically.
+#
+# -----------------------------------------------------------------------------
+# OpenSSL CVEs in gcr.io/distroless/nodejs22-debian12 (libssl3 3.0.18-1~deb12u2)
+# -----------------------------------------------------------------------------
+# Fixed in libssl3 3.0.19-1~deb12u2, but the Debian 12 base inside Google's
+# distroless image hasn't been rebuilt with that package yet. We don't control
+# the distroless rebuild cadence — re-check after Google publishes a refreshed
+# nodejs22-debian12 tag (typically every few weeks). The Node app itself does
+# not invoke OpenSSL on a code path that uses the affected APIs (TLS session
+# resumption / DANE / CMS), so impact is low for our usage.
+# Review by: 2026-07-01 — remove if distroless has been rebuilt.
+CVE-2026-31789
+CVE-2026-28387
+CVE-2026-28388
+CVE-2026-28389
+CVE-2026-28390

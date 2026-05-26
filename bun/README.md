@@ -31,7 +31,7 @@ flowchart LR
 ## 3. Production setup
 
 ```dockerfile
-FROM oven/bun:1.1.43-alpine AS builder
+FROM oven/bun:1.3.14-alpine AS builder
 COPY package.json bun.lock* bun.lockb* ./
 RUN bun install --frozen-lockfile --production
 COPY src ./src
@@ -40,7 +40,7 @@ RUN bun build src/main.ts --target=bun --outdir=dist --minify
 
 Tips:
 
-- **Pin Bun version**: `oven/bun:1.1.43-alpine`, never `:latest`.
+- **Pin Bun version**: `oven/bun:1.3.14-alpine`, never `:latest`.
 - **Use `--frozen-lockfile`**: fail the build if lockfile mismatches `package.json`.
 - **Use `--production`** during install: skip dev deps automatically.
 - **Mount the install cache**: `--mount=type=cache,target=/root/.bun/install/cache`.
@@ -52,7 +52,7 @@ Tips:
 `bun build --compile` produces a single executable that embeds the Bun runtime + your JS. It's tempting as a "minimal" deploy:
 
 ```dockerfile
-FROM oven/bun:1.1.43-slim AS builder
+FROM oven/bun:1.3.14-slim AS builder
 RUN bun build src/main.ts --compile --outfile=app
 
 FROM gcr.io/distroless/cc-debian12:nonroot

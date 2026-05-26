@@ -16,6 +16,7 @@ ARG VCS_REF
 # Stage 1: Builder — static musl build
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-alpine${ALPINE_VERSION} AS builder
+ARG TARGETARCH
 
 RUN apk add --no-cache musl-dev
 WORKDIR /build
@@ -23,8 +24,13 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+# Cache mount notes:
+# - cargo registry holds source crates (arch-independent); `sharing=locked`
+#   serialises buildx parallel-platform builds so they don't race on extracting
+#   the same crate (and collide on `.cargo-ok` markers).
+# - `target/` is arch-specific compiled output; isolate per TARGETARCH.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=cargo-target-${TARGETARCH} \
     cargo build --release && \
     cp target/release/app /app
 

@@ -5,7 +5,7 @@
 # Best practices: bun install --production + non-root + tini-style PID 1
 # =============================================================================
 
-ARG BUN_VERSION=1.1.43
+ARG BUN_VERSION=1.3.14
 ARG ALPINE_VERSION=3.22
 
 ARG VERSION=1.0.0
